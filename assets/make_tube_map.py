@@ -48,8 +48,8 @@ def rounded(points, r=46):
     return Path(verts, codes)
 
 
-def track(ax, pts, color, dashed=False, z=2):
-    ax.add_patch(PathPatch(rounded(pts), fill=False, edgecolor=color, lw=LW, capstyle="butt",
+def track(ax, pts, color, dashed=False, z=2, lw=LW):
+    ax.add_patch(PathPatch(rounded(pts), fill=False, edgecolor=color, lw=lw, capstyle="butt",
                            joinstyle="round", zorder=z, linestyle=(0, (1.4, 0.9)) if dashed else "-"))
 
 
@@ -103,13 +103,21 @@ def main():
     QY = 650                 # QC line
 
     # ---------------- tracks
-    track(ax, [(110, Y1), (600, Y1)], SHARED)
-    track(ax, [(600, Y1), (655, UP), (865, UP), (920, Y1)], WHATSHAP)
-    track(ax, [(600, Y1), (655, DN), (865, DN), (920, Y1)], LONGPHASE)
-    track(ax, [(920, Y1), (975, UP), (1185, UP), (1240, Y1)], SHAPEIT4)
-    track(ax, [(920, Y1), (975, DN), (1185, DN), (1240, Y1)], BEAGLE)
-    track(ax, [(1240, Y1), (XR, Y1), (XR, Y2), (430, Y2)], SHARED)
-    track(ax, [(XR, 600), (XR - 60, QY), (760, QY), (700, Y2)], QC, z=1)
+    # Coloured tracks leave and rejoin the shared line horizontally (60 px stubs) and the shared
+    # line is drawn on top (z=4), so every split / merge is a smooth bend without cut ends.
+    def fork(x0, x1, color, y):
+        track(ax, [(x0, Y1), (x0 + 60, Y1), (x0 + 125, y), (x1 - 125, y), (x1 - 60, Y1), (x1, Y1)], color)
+
+    fork(570, 950, WHATSHAP, UP)
+    fork(570, 950, LONGPHASE, DN)
+    fork(980, 1360, SHAPEIT4, UP)
+    fork(980, 1360, BEAGLE, DN)
+    # shared line ends exactly where the bends start (stub end - 30 px corner radius); slightly wider to
+    # cover the anti-aliased edges of the stubs underneath
+    track(ax, [(110, Y1), (600, Y1)], SHARED, z=4, lw=LW + 1.5)
+    track(ax, [(920, Y1), (1010, Y1)], SHARED, z=4, lw=LW + 1.5)
+    track(ax, [(1330, Y1), (XR, Y1), (XR, Y2), (430, Y2)], SHARED, z=4, lw=LW + 1.5)
+    track(ax, [(XR, 560), (XR, 600), (XR - 60, QY), (760, QY), (700, Y2)], QC, z=1)
     track(ax, [(XR, 690), (1660, 690), (1660, 1000), (1580, 1000)], CELLS, dashed=True, z=1)
     track(ax, [(345, Y1), (345, 245)], SHARED, z=1)                 # Clair3 VCF out
     track(ax, [(XR, 560), (1580, 560)], SHARED, z=1)                # phased VCF out
@@ -127,15 +135,15 @@ def main():
     label(ax, 345, 138, "Clair3 variants")
 
     ax.text(760, UP - 75, "Read-based phasing", ha="center", fontsize=14.5, fontweight="bold", color=INK)
-    ax.text(1080, UP - 75, "Population phasing", ha="center", fontsize=14.5, fontweight="bold", color=INK)
-    ax.text(1080, UP - 54, "1kGP panel + genetic maps", ha="center", fontsize=11.5, color="#52514e")
+    ax.text(1170, UP - 75, "Population phasing", ha="center", fontsize=14.5, fontweight="bold", color=INK)
+    ax.text(1170, UP - 54, "1kGP panel + genetic maps", ha="center", fontsize=11.5, color="#52514e")
     for x, y, tool, va in [(760, UP, "WhatsHap", "bottom"), (760, DN, "LongPhase", "top"),
-                           (1080, UP, "SHAPEIT4 --use-PS", "bottom"), (1080, DN, "Beagle 5", "top")]:
+                           (1170, UP, "SHAPEIT4 --use-PS", "bottom"), (1170, DN, "Beagle 5", "top")]:
         stop(ax, x, y)
         label(ax, x, y - 30 if va == "bottom" else y + 32, "", tool, va=va)
 
-    stop(ax, 1360, Y1)
-    label(ax, 1360, Y1 - 30, "Hybrid merge", "block orientation\nor WhatsHap")
+    stop(ax, 1415, Y1)
+    label(ax, 1415, Y1 - 30, "Hybrid merge", "block orientation\nor WhatsHap")
 
     # ---------------- right side: phased VCF + single-cell branch
     stop(ax, XR, 560)
