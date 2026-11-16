@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# Per-cell allele count tables for ASCAT.sc + cell QC (run_splongget.sh step 5)
+# Per-cell allele count tables for ASCAT.sc + cell QC
 # usage: ascat_tables.R <cellsnp_dir> <out_dir> <qc.tsv>
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 3) stop("usage: ascat_tables.R <cellsnp_dir> <out_dir> <qc.tsv>")

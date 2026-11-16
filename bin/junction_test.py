@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Masking test for "does the population phaser connect the read blocks correctly?"
-(no truth set needed; adapted from phase_junction_test.py)
+(no truth set needed)
 
 The reads already tell us the true phase INSIDE each read block. We hide that link in the
 middle of every big block (the second half gets a new PS), let the population phaser

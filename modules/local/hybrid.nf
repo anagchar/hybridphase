@@ -26,7 +26,7 @@ process HYBRID_MERGE {
         """
     } else if (params.hybrid_merge == 'whatshap') {
         """
-        # run_splongget.sh step 2c: reads + population VCF as an extra 'pseudo-read';
+        # reads + population VCF as an extra 'pseudo-read';
         # also re-attaches the SNPs that are not in the panel
         bcftools view -r ${chrom} ${het_vcf} -Oz -o input_${chrom}.vcf.gz
         tabix -p vcf input_${chrom}.vcf.gz

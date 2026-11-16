@@ -1,6 +1,5 @@
 /*
  * Optional (--barcodes): cell-level allele counts on the phased SNPs + ASCAT.sc tables
- * (run_splongget.sh steps 4-5)
  */
 
 process CELLSNP {

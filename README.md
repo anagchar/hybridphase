@@ -31,8 +31,8 @@ Skip Clair3 with an existing VCF: `--vcf merge_output.vcf.gz`.
 
 The phasing container has bcftools, WhatsHap, LongPhase, SHAPEIT4, Beagle, cellsnp-lite,
 R and python (pysam, pandas, matplotlib), plus the 1kGP high-coverage panel and genetic maps
-baked into `/opt/ref_data`. It is the old `splongget_phasing.def` of the bash pipeline with LongPhase, Beagle and
-the plotting libraries added, so it must be rebuilt once.
+baked into `/opt/ref_data`. Build it once on the cluster
+(the panel and map source paths are set in its `%files` section).
 
 To use a panel outside the container: `--panel_dir`, `--panel_name '{chr}.bcf'`, `--map_dir`,
 `--map_name`, and add the folders to `--extra_binds`.
@@ -40,7 +40,7 @@ To use a panel outside the container: `--panel_dir`, `--panel_name '{chr}.bcf'`,
 ## Methods
 
 **Read phasers** (`--read_phaser`, per chromosome)
-- `whatshap`: `whatshap phase --ignore-read-groups` (as in the bash pipeline)
+- `whatshap`: `whatshap phase --ignore-read-groups`
 - `longphase`: `longphase phase --ont` (or `--pb` with `--platform hifi`)
 
 **Population phasers** (`--pop_phaser`, per chromosome)
@@ -56,7 +56,7 @@ Lists run every combination (e.g. 2 × 2 = 4 results); the report compares them.
   the population phase at the SNPs both share (≥ `--orient_min_snps`). SNPs outside the panel keep their
   read phase, panel SNPs outside read blocks take the population phase. The read phaser's blocks are never
   changed, so this works the same way for WhatsHap and LongPhase.
-- `whatshap`: the bash pipeline's step 2c: `whatshap phase` with the reads and the population VCF as an
+- `whatshap`: `whatshap phase` with the reads and the population VCF as an
   extra pseudo-read. With LongPhase as read phaser this re-phases the reads with WhatsHap.
 
 **Haplotagging**: `whatshap haplotag` (default) or `longphase haplotag` (`--haplotag_tool`) with the first
@@ -75,7 +75,7 @@ allele count tables (bash steps 4–5).
 | Variant calling | filter funnel, VAF / depth / QUAL distributions with the thresholds, het SNP density per chromosome (low = LOH or low coverage) |
 | Completeness | % het SNPs phased and block N50 per chromosome, read-only vs hybrid; read block length distribution |
 | Read blocks vs population | ideogram of read blocks coloured by how well the population phase agrees with them; orientation success vs block size; switches between read-only and final phasing |
-| **Junction test** | masking benchmark (`bin/junction_test.py`, from `phase_junction_test.py`): every read block with ≥ 10 SNPs is split in two, the population phaser re-joins the halves blind, and the reads say which way is right. Error rate per gap size, with the gap distribution of the real block junctions next to it |
+| **Junction test** | masking benchmark (`bin/junction_test.py`): every read block with ≥ 10 SNPs is split in two, the population phaser re-joins the halves blind, and the reads say which way is right. Error rate per gap size, with the gap distribution of the real block junctions next to it |
 | Method agreement | pairwise switch rate and block-wise Hamming between all combinations |
 | Haplotagged BAM | % reads H1 / H2 / untagged per chromosome; H1 read fraction in 1 Mb bins along the genome. Normal tissue sits at 0.5; CNAs / LOH move whole segments away from it, and switch errors show as jumps between mirrored levels |
 | Single cells | covered SNPs and depth per cell (with `--barcodes`) |
