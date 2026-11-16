@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 /*
- * splongget-phasing
+ * hybrid-phasing
  *
  *   BAM ── Clair3 ── germline het SNPs ─┬─ read phasing (WhatsHap | LongPhase)  ── read blocks (PS)
  *                                       └─ population phasing (SHAPEIT4 | Beagle) ─┐
@@ -63,7 +63,7 @@ workflow {
 
     log.info """
     ==============================================================
-     splongget-phasing ${workflow.manifest.version}
+     hybrid-phasing ${workflow.manifest.version}
     ==============================================================
      sample        : ${params.sample}
      bam           : ${params.bam}

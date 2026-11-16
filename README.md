@@ -1,4 +1,4 @@
-# splongget-phasing
+# hybrid-phasing
 
 Nextflow pipeline for **hybrid phasing of long-read data**: read-based phase blocks
 (WhatsHap or LongPhase) are joined into chromosome-scale haplotypes with a population
@@ -8,7 +8,7 @@ report** is written.
 It is the Nextflow version of `legacy/run_splongget.sh`, with Clair3 in front and
 haplotagging + a visual report at the end.
 
-![splongget-phasing tube map](assets/splongget_tube_map.png)
+![hybrid-phasing tube map](assets/hybrid_phasing_tube_map.png)
 
 The map is drawn by `assets/make_tube_map.py`; re-run it after changing the pipeline.
 
@@ -27,7 +27,7 @@ list (`*known_barcodes.txt`, barcode + count) can be passed as `--barcodes`: onl
 nextflow run main.nf -profile vsc_mindwell \
     --sample COLO829BL --bam COLO829BL.bam --ref GRCh38.fasta \
     --clair3_model_dir /path/to/clair3_models --clair3_model r1041_e82_400bps_sup_v520 \
-    --clair3_container hkubal-clair3_v2.0.0.sif --phasing_container splongget_phasing.sif \
+    --clair3_container hkubal-clair3_v2.0.0.sif --phasing_container hybrid_phasing.sif \
     --read_phaser whatshap,longphase --pop_phaser shapeit4,beagle
 ```
 
@@ -41,11 +41,11 @@ Skip Clair3 with an existing VCF: `--vcf merge_output.vcf.gz`.
 | step | container |
 |---|---|
 | Clair3 | `hkubal/clair3:v2.0.0` (`--clair3_container`, a local `.sif` works) |
-| everything else | `containers/splongget_phasing.def` → `apptainer build splongget_phasing.sif containers/splongget_phasing.def` |
+| everything else | `containers/hybrid_phasing.def` → `apptainer build hybrid_phasing.sif containers/hybrid_phasing.def` |
 
 The phasing container has bcftools, WhatsHap, LongPhase, SHAPEIT4, Beagle, cellsnp-lite,
 R and python (pysam, pandas, matplotlib), plus the 1kGP high-coverage panel and genetic maps
-baked into `/opt/ref_data`. It is the old `splongget_phasing.def` with LongPhase, Beagle and
+baked into `/opt/ref_data`. It is the old `splongget_phasing.def` of the bash pipeline with LongPhase, Beagle and
 the plotting libraries added, so it must be rebuilt once.
 
 To use a panel outside the container: `--panel_dir`, `--panel_name '{chr}.bcf'`, `--map_dir`,

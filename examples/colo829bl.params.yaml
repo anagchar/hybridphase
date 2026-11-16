@@ -8,7 +8,7 @@ platform: ont
 clair3_model_dir: /gpfs1/project/prj_00009/home/harryanagno/software/clair3_models
 clair3_model: r1041_e82_400bps_sup_v520
 clair3_container: /gpfs1/project/prj_00009/home/harryanagno/software/hkubal-clair3_v2.0.0.sif
-phasing_container: /gpfs1/project/prj_00009/home/harryanagno/software/singularity/splongget_phasing.sif
+phasing_container: /gpfs1/project/prj_00009/home/harryanagno/software/singularity/hybrid_phasing.sif
 
 read_phaser: whatshap,longphase
 pop_phaser: shapeit4,beagle

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Draws the metro / tube map of the pipeline (assets/splongget_tube_map.svg + .png).
+Draws the metro / tube map of the pipeline (assets/hybrid_phasing_tube_map.svg + .png).
 
 Edit STATIONS / LINES below when the pipeline changes and re-run:
     python3 assets/make_tube_map.py
@@ -15,7 +15,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, FancyBboxPatch, PathPatch, Polygon
 from matplotlib.path import Path
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "splongget_tube_map")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hybrid_phasing_tube_map")
 
 # ---- colours: one per line, tool names in TOOL ---------------------------------------------------
 SHARED = "#1B2944"      # path every run takes
@@ -190,7 +190,7 @@ def main():
         ax.add_line(Line2D([lx, lx + 60], [yy, yy], color=c, lw=LW * 0.8, solid_capstyle="butt",
                            linestyle=(0, (1.4, 0.9)) if dsh else "-"))
         ax.text(lx + 74, yy, lab, va="center", fontsize=12, fontweight="bold", color=INK)
-    ax.text(70, 985, "splongget-phasing", fontsize=34, fontweight="bold", color=SHARED, va="center")
+    ax.text(70, 985, "hybrid-phasing", fontsize=34, fontweight="bold", color=SHARED, va="center")
     ax.text(70, 1025, "every read × population combination runs; the report compares them", fontsize=12.5,
             color="#52514e", va="center")
 

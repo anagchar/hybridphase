@@ -103,7 +103,7 @@ def main():
     with pysam.VariantFile(a.reads) as vf:
         if "PS" not in vf.header.formats:
             vf.header.add_line('##FORMAT=<ID=PS,Number=1,Type=Integer,Description="Phase set identifier">')
-        vf.header.add_line("##splongget_hybrid_merge=read blocks oriented by population phase "
+        vf.header.add_line("##hybrid_phasing_merge=read blocks oriented by population phase "
                            f"(min shared SNPs {a.min_snps}); pop={a.pop}")
         chrom_ps = {}
         with pysam.VariantFile(a.out, "wz", header=vf.header) as vo:
