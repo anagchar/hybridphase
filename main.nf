@@ -10,7 +10,7 @@
  * Every combination of --read_phaser x --pop_phaser is run; the report compares them.
  */
 
-include { CLAIR3; FILTER_HET_SNPS }                      from './modules/local/variant_calling'
+include { DROP_DUPLICATES; CLAIR3; FILTER_HET_SNPS }     from './modules/local/variant_calling'
 include { WHATSHAP_PHASE; LONGPHASE_PHASE }              from './modules/local/read_phasing'
 include { SHAPEIT4; BEAGLE }                             from './modules/local/pop_phasing'
 include { HYBRID_MERGE; JUNCTION_SPLIT; JUNCTION_SCORE;
@@ -71,6 +71,7 @@ workflow {
      variant calls : ${params.vcf ?: "Clair3 (${params.clair3_model})"}
      chromosomes   : ${chroms.first()} .. ${chroms.last()} (${chroms.size()})
      combinations  : ${combos.join(', ')}  (merge: ${params.hybrid_merge})
+     drop dups     : ${params.drop_duplicates}
      haplotag      : ${params.haplotag ? "${ht_combo} with ${params.haplotag_tool}" : 'no'}
      outdir        : ${params.outdir}/${params.sample}
     ==============================================================
@@ -80,15 +81,25 @@ workflow {
     def bai = findIndex(params.bam, [{ "${it}.bai" }, { it.replaceFirst(/\.bam$/, '.bai') }, { "${it}.csi" }])
     def ref = file(params.ref, checkIfExists: true)
     def fai = file("${params.ref}.fai", checkIfExists: true)
-    ch_bam = Channel.value([bam, bai])
-    ch_ref = Channel.value([ref, fai])
+    ch_bam_in = Channel.value([bam, bai])           // original BAM: haplotagged and used for single cells
+    ch_ref    = Channel.value([ref, fai])
+
+    // ---------------------------------------------------------------- 0. duplicate-flagged reads out
+    if (params.drop_duplicates) {
+        DROP_DUPLICATES(ch_bam_in)
+        ch_bam     = DROP_DUPLICATES.out.bam.first()   // for variant calling and phasing
+        ch_dup_tsv = DROP_DUPLICATES.out.stats
+    } else {
+        ch_bam     = ch_bam_in
+        ch_dup_tsv = Channel.empty()
+    }
 
     // ---------------------------------------------------------------- 1. variant calling
     if (params.vcf) {
         def tbi = findIndex(params.vcf, [{ "${it}.tbi" }, { "${it}.csi" }])
         ch_vcf = Channel.value([params.sample, file(params.vcf, checkIfExists: true), tbi])
     } else {
-        CLAIR3(Channel.value([params.sample, bam, bai]), ch_ref, file(params.clair3_model_dir, checkIfExists: true))
+        CLAIR3(ch_bam.map { b, i -> [params.sample, b, i] }, ch_ref, file(params.clair3_model_dir, checkIfExists: true))
         ch_vcf = CLAIR3.out.vcf
     }
 
@@ -194,7 +205,7 @@ workflow {
     // ---------------------------------------------------------------- 7. haplotag
     ch_ht_vcf = ch_final.filter { it[0] == ht_combo }
     if (params.haplotag) {
-        HAPLOTAG(ch_ht_vcf, ch_bam, ch_ref)
+        HAPLOTAG(ch_ht_vcf, ch_bam_in, ch_ref)
         HAPLOTAG_COUNTS(HAPLOTAG.out.bam)
         ch_ht_counts = HAPLOTAG_COUNTS.out.tsv
     } else {
@@ -203,7 +214,7 @@ workflow {
 
     // ---------------------------------------------------------------- 8. optional single-cell allele counts
     if (params.barcodes) {
-        CELLSNP(ch_ht_vcf, ch_bam, file(params.barcodes, checkIfExists: true))
+        CELLSNP(ch_ht_vcf, ch_bam_in, file(params.barcodes, checkIfExists: true))
         ASCAT_TABLES(CELLSNP.out.dir)
         ch_cell_qc = ASCAT_TABLES.out.qc
     } else {
@@ -214,7 +225,7 @@ workflow {
     def run_info = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
         sample: params.sample, bam: params.bam, ref: params.ref,
         variant_calls: params.vcf ?: "Clair3 ${params.clair3_model}".toString(),
-        platform: params.platform, chroms: chroms, combos: combos, hybrid_merge: params.hybrid_merge,
+        platform: params.platform, drop_duplicates: params.drop_duplicates, chroms: chroms, combos: combos, hybrid_merge: params.hybrid_merge,
         haplotag_combo: params.haplotag ? ht_combo : null, haplotag_tool: params.haplotag_tool,
         haplotag_bin_mb: params.haplotag_bin_mb,
         filters: [min_qual: params.min_qual, min_dp: params.min_dp, min_vaf: params.min_vaf, max_vaf: params.max_vaf],
@@ -225,7 +236,7 @@ workflow {
         .mix(FILTER_HET_SNPS.out.calls, FILTER_HET_SNPS.out.kept)
         .mix(CONCAT_PHASED.out.stats.flatMap { id, s, b -> [s, b] })
         .mix(COMPARE_READS_FINAL.out.tsv.flatMap { id, t, b -> [t, b] })
-        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc)
+        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc, ch_dup_tsv)
         .collect()
 
     REPORT(ch_report_files, fai, run_info)

@@ -83,3 +83,29 @@ process FILTER_HET_SNPS {
     rm -f pass_snps.vcf.gz*
     """
 }
+
+/*
+ * lrsinglecell (IntGenomicsLab) DNA BAMs have duplicates FLAGGED (0x400), not removed.
+ * Clair3 counts flagged reads, so drop them before calling / phasing.
+ * The original BAM (flags kept) is the one that gets haplotagged.
+ */
+process DROP_DUPLICATES {
+    tag "${params.sample}"
+    label 'phase'
+
+    input:
+    tuple path(bam), path(bai)
+
+    output:
+    tuple path("${params.sample}.nodup.bam"), path("${params.sample}.nodup.bam.bai"), emit: bam
+    path "${params.sample}.duplicates.tsv", emit: stats
+
+    script:
+    """
+    samtools view -@ ${task.cpus} -b -F 0x400 -o ${params.sample}.nodup.bam ${bam}
+    samtools index -@ ${task.cpus} ${params.sample}.nodup.bam
+    printf "reads\\tn\\nall_primary\\t%s\\nduplicate_flagged\\t%s\\n" \\
+        \$(samtools view -@ ${task.cpus} -c -F 0x904 ${bam}) \\
+        \$(samtools view -@ ${task.cpus} -c -F 0x904 -f 0x400 ${bam}) > ${params.sample}.duplicates.tsv
+    """
+}

@@ -38,5 +38,6 @@ json.dump(dict(sample="SYNTHETIC", variant_calls="synthetic", chroms=["chr21", "
                hybrid_merge="orient", haplotag_combo="whatshap_shapeit4", haplotag_tool="whatshap",
                run_name="test", started="-"), open("data/run_info.json", "w"))
 PY
+printf "reads\tn\nall_primary\t1000000\nduplicate_flagged\t42000\n" > data/SYNTHETIC.duplicates.tsv
 python3 $B/phasing_report.py --data data --fai ref.fa.fai --out report
 echo "Report: $T/report/phasing_report.html"

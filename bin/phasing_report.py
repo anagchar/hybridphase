@@ -140,6 +140,12 @@ def section_variants(R, d, a, chroms, lens, kpi):
     if funnel is None and calls is None:
         return
     items = []
+    dup = glob.glob(os.path.join(d, "*.duplicates.tsv"))
+    if dup:
+        dd = read_tsv(dup[0]).set_index("reads")["n"]
+        if dd.get("all_primary", 0):
+            kpi.append(("Duplicate-flagged reads removed", f"{100 * dd['duplicate_flagged'] / dd['all_primary']:.1f}%",
+                        f"{int(dd['duplicate_flagged']):,} of {int(dd['all_primary']):,} primary reads"))
     if funnel is not None:
         f = funnel.set_index("step")["n"]
         kpi.append(("Germline het SNPs kept", f"{int(f.get('het_kept', 0)):,}",

@@ -8,12 +8,18 @@ report** is written.
 It is the Nextflow version of `legacy/run_splongget.sh`, with Clair3 in front and
 haplotagging + a visual report at the end.
 
-```
-BAM ─ Clair3 ─ germline het SNPs ─┬─ read phasing ─────── read blocks (PS) ─┐
-                                  │  WhatsHap | LongPhase                   ├─ hybrid merge ─ phased VCF ─ haplotag BAM
-                                  └─ population phasing ─────────────────────┘        │
-                                     SHAPEIT4 | Beagle (1kGP panel)                   └─ QC + HTML report
-```
+![splongget-phasing tube map](assets/splongget_tube_map.png)
+
+The map is drawn by `assets/make_tube_map.py`; re-run it after changing the pipeline.
+
+## Input from lrsinglecell
+
+The BAM is typically the DNA output of [IntGenomicsLab/lrsinglecell](https://github.com/IntGenomicsLab/lrsinglecell):
+`<outdir>/<sample>/dna/bam/dedup/<sample>.bam`, which carries `CB`/`UB` tags. That pipeline **flags**
+duplicates (0x400) but keeps them in the file, so this pipeline removes flagged reads before Clair3 and
+phasing (`--drop_duplicates`, default true; the share removed is shown in the report). The original BAM,
+flags included, is the one that gets haplotagged and used for single-cell counts. Its flexiplex barcode
+list (`*known_barcodes.txt`, barcode + count) can be passed as `--barcodes`: only the first column is used.
 
 ## Quick start
 
@@ -109,6 +115,7 @@ pipeline_info/          Nextflow timeline, report, trace, DAG
 
 | parameter | default | |
 |---|---|---|
+| `--drop_duplicates` | true | remove 0x400-flagged reads before calling / phasing |
 | `--chroms` | `1-22` | e.g. `21,22` for a test |
 | `--min_qual / --min_dp / --min_vaf / --max_vaf` | 20 / 15 / 0.25 / 0.75 | het SNP filter |
 | `--shapeit4_use_ps` | 0.001 | |
@@ -124,3 +131,7 @@ All parameters with comments: `nextflow.config`. Resources per step: `conf/base.
 short read blocks, a population phase with long-range switch errors) and checks that the merge never
 breaks a read block. It needs only python with pysam, pandas and matplotlib. A full test run on real data:
 `-profile vsc_mindwell,test` (chr21–22, all four combinations).
+
+## Citations
+
+Tools used by the pipeline: [CITATIONS.md](CITATIONS.md). Changes: [CHANGELOG.md](CHANGELOG.md).
