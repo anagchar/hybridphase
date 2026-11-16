@@ -8,7 +8,7 @@
 #SBATCH --account=lp_big_mindwell_cpu
 #SBATCH --partition=dedicated_big_bigmem
 #SBATCH --clusters=mindwell
-#SBATCH --job-name=hybrid_phasing_nf
+#SBATCH --job-name=hybridphase_nf
 #SBATCH --output=%x_%j.out
 set -euo pipefail
 
@@ -17,6 +17,6 @@ micromamba activate nextflow_env          # any env with nextflow >= 23.10 and j
 micromamba activate --stack singularity-env
 
 cd "${SLURM_SUBMIT_DIR}"
-export NXF_WORK="${VSC_SCRATCH}/nf_work/hybrid_phasing"
+export NXF_WORK="${VSC_SCRATCH}/nf_work/hybridphase"
 
 nextflow run main.nf -profile vsc_mindwell -params-file examples/colo829bl.params.yaml -resume

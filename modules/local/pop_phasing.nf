@@ -6,7 +6,7 @@
  *            the read blocks are oriented to it afterwards in HYBRID_MERGE.
  *
  *  The panel / map paths are plain strings so that the copies baked into the container
- *  (/opt/ref_data, see containers/hybrid_phasing.def) can be used directly.
+ *  (/opt/ref_data, see containers/hybridphase.def) can be used directly.
  */
 
 def panelPath(chrom) { "${params.panel_dir}/${params.panel_name.replace('{chr}', chrom)}" }
