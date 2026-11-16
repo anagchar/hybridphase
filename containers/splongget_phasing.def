@@ -1,0 +1,107 @@
+Bootstrap: docker
+From: condaforge/miniforge3:latest
+
+# Build (on the cluster, where the reference data lives):
+#   apptainer build splongget_phasing.sif containers/splongget_phasing.def
+# Edit the two %files source paths if your panel / maps live elsewhere.
+
+%labels
+    Author SPLONGGET Phasing Pipeline
+    Version 1.2.0 (WhatsHap + LongPhase + SHAPEIT4 + Beagle; 1kGP high-coverage 3,202-sample phased panel & maps baked in)
+
+%environment
+    export PATH=/opt/conda/envs/splongget/bin:$PATH
+    export LC_ALL=C
+    export PANEL_DIR=/opt/ref_data/1000G_phase3_hg38
+    export MAP_DIR=/opt/ref_data/genetic_maps
+    export MPLCONFIGDIR=/tmp
+
+%files
+    /gpfs1/project/prj_00009/home/harryanagno/software/singularity/Allele_specific_ASCAT/tmp/ref_files/hg38 /opt/
+    /gpfs1/project/prj_00009/home/harryanagno/software/singularity/Allele_specific_ASCAT/tmp/mapfiles /opt/
+
+%post -c /bin/bash
+    set -euo pipefail
+    echo "===> Verifying raw panel integrity..."
+    for f in /opt/hg38/*.vcf.gz; do gzip -t "$f" || { echo "CORRUPT: $f"; exit 1; }; done
+    export PATH=/opt/conda/bin:$PATH
+    export DEBIAN_FRONTEND=noninteractive
+
+    # 1. System utilities (procps: needed by Nextflow for task metrics)
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential procps git wget curl ca-certificates tabix \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # 2. Main env: phasing tools, single-cell counting, R and python plotting for the report
+    mamba create -y -n splongget -c conda-forge -c bioconda \
+        python=3.10 \
+        bcftools=1.21 \
+        htslib=1.21 \
+        samtools=1.21 \
+        whatshap=2.3 \
+        longphase \
+        beagle \
+        cellsnp-lite=1.2.3 \
+        pysam \
+        numpy \
+        pandas \
+        matplotlib \
+        r-base=4.3.2 \
+        r-matrix \
+        r-data.table
+
+    # 3. SHAPEIT4 in its own env (dependency conflicts with the main env)
+    mamba create -y -n shapeit4 -c conda-forge -c bioconda shapeit4=4.2.2
+    ln -sf /opt/conda/envs/shapeit4/bin/shapeit4 /usr/local/bin/shapeit4
+
+    # fail the build here if a tool does not run
+    /usr/local/bin/shapeit4 --help > /dev/null
+    /opt/conda/envs/splongget/bin/longphase --version
+    /opt/conda/envs/splongget/bin/beagle 2>&1 | head -n 2
+    /opt/conda/envs/splongget/bin/python -c "import pysam, pandas, matplotlib"
+
+    mamba clean --all -f -y
+    export PATH=/opt/conda/envs/splongget/bin:$PATH
+
+    # 4. Reference data: copied in by %files, converted here, raw copies removed
+    RAW_PANEL=/opt/hg38
+    RAW_MAPS=/opt/mapfiles
+    PANEL_DIR=/opt/ref_data/1000G_phase3_hg38
+    MAP_DIR=/opt/ref_data/genetic_maps
+    mkdir -p "$PANEL_DIR" "$MAP_DIR"
+
+    # Genetic maps: plink format (chr . cM pos) -> SHAPEIT4 format (pos chr cM).
+    # (Beagle gets PLINK maps back from these on the fly, see modules/local/pop_phasing.nf)
+    echo "===> Converting genetic maps..."
+    for c in $(seq 1 22) X; do
+        awk 'BEGIN{OFS="\t"; print "pos","chr","cM"} {print $4,$1,$3}' \
+            "$RAW_MAPS/plink.chr${c}.GRCh38.map" | gzip > "$MAP_DIR/chr${c}.b38.gmap.gz"
+    done
+
+    # 1kGP high-coverage phased panel (3,202 samples, GRCh38, chr-prefixed):
+    # keep biallelic SNPs, drop INFO, add AC/AN/AF, write indexed BCF for shapeit4 --reference
+    echo "===> Converting 1kGP high-coverage panel to indexed BCF..."
+    for c in $(seq 1 22); do
+        echo "Processing chr${c}..."
+        bcftools view -v snps -m2 -M2 --threads 4 -Ou \
+            "$RAW_PANEL/1kGP_high_coverage_Illumina.chr${c}.filtered.SNV_INDEL_SV_phased_panel.vcf.gz" \
+          | bcftools annotate -x INFO -Ou - \
+          | bcftools +fill-tags --threads 4 -Ob \
+                -o "$PANEL_DIR/1kGP_phase3_chr${c}.bcf" --write-index=csi - -- -t AN,AC,AF
+    done
+
+    rm -rf "$RAW_PANEL" "$RAW_MAPS"
+    chmod -R a+rX /opt/ref_data
+    echo "===> Reference data pre-baked successfully."
+
+%runscript
+    exec "$@"
+
+%help
+    Environment for splongget-phasing: bcftools / samtools / htslib 1.21, WhatsHap 2.3, LongPhase,
+    SHAPEIT4 4.2.2, Beagle 5, cellsnp-lite 1.2.3, R 4.3.2 (Matrix, data.table), python 3.10
+    (pysam, pandas, matplotlib).
+
+    Reference data (GRCh38):
+      $PANEL_DIR = /opt/ref_data/1000G_phase3_hg38   1kGP_phase3_chr{1..22}.bcf (+ .csi)
+      $MAP_DIR   = /opt/ref_data/genetic_maps        chr{1..22,X}.b38.gmap.gz

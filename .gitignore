@@ -1,0 +1,7 @@
+work/
+results/
+.nextflow*
+*.sif
+tests/out/
+__pycache__/
+.DS_Store

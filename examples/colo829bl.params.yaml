@@ -1,0 +1,16 @@
+# nextflow run main.nf -profile vsc_mindwell -params-file examples/colo829bl.params.yaml
+sample: COLO829BL
+bam: /gpfs1/project/prj_00009/home/harryanagno/data/COLO829BL/results/COLO829BL/dna/bam/dedup/COLO829BL.bam
+ref: /gpfs1/project/prj_00009/home/harryanagno/data/reference_genome/Homo_sapiens_assembly38_masked_noALT.fasta
+outdir: /gpfs1/project/prj_00009/home/harryanagno/ATLAS/COLO/nf_phasing
+
+platform: ont
+clair3_model_dir: /gpfs1/project/prj_00009/home/harryanagno/software/clair3_models
+clair3_model: r1041_e82_400bps_sup_v520
+clair3_container: /gpfs1/project/prj_00009/home/harryanagno/software/hkubal-clair3_v2.0.0.sif
+phasing_container: /gpfs1/project/prj_00009/home/harryanagno/software/singularity/splongget_phasing.sif
+
+read_phaser: whatshap,longphase
+pop_phaser: shapeit4,beagle
+hybrid_merge: orient
+haplotag_combo: whatshap_shapeit4
