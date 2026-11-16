@@ -5,21 +5,7 @@ Nextflow pipeline for **hybrid phasing of long-read data**: read-based phase blo
 reference panel (SHAPEIT4 or Beagle). Then the BAM is haplotagged and a **truth-free QC
 report** is written.
 
-It is the Nextflow version of `legacy/run_splongget.sh`, with Clair3 in front and
-haplotagging + a visual report at the end.
-
 ![hybridphase tube map](assets/hybridphase_tube_map.png)
-
-The map is drawn by `assets/make_tube_map.py`; re-run it after changing the pipeline.
-
-## Input from lrsinglecell
-
-The BAM is typically the DNA output of [IntGenomicsLab/lrsinglecell](https://github.com/IntGenomicsLab/lrsinglecell):
-`<outdir>/<sample>/dna/bam/dedup/<sample>.bam`, which carries `CB`/`UB` tags. That pipeline **flags**
-duplicates (0x400) but keeps them in the file, so this pipeline removes flagged reads before Clair3 and
-phasing (`--drop_duplicates`, default true; the share removed is shown in the report). The original BAM,
-flags included, is the one that gets haplotagged and used for single-cell counts. Its flexiplex barcode
-list (`*known_barcodes.txt`, barcode + count) can be passed as `--barcodes`: only the first column is used.
 
 ## Quick start
 
