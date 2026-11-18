@@ -2,6 +2,12 @@
  * Combine read blocks with the population phase, per chromosome; then the genome-wide steps.
  */
 
+// read blocks as soft constraints in the merge, with the same error rate as SHAPEIT4 --use-PS by default
+def blockErrorArg() {
+    def e = params.read_block_error != null ? params.read_block_error : params.shapeit4_use_ps
+    return (e as double) > 0 ? "--block-error ${e}" : ''
+}
+
 process HYBRID_MERGE {
     tag "${combo}:${chrom}"
     label 'phase'
@@ -33,7 +39,7 @@ process HYBRID_MERGE {
         whatshap phase --reference ${ref} --ignore-read-groups --chromosome ${chrom} \\
             -o ${out}.vcf.gz input_${chrom}.vcf.gz ${bam} ${pop_vcf}
         tabix -f -p vcf ${out}.vcf.gz
-        hybrid_merge.py --reads ${reads_vcf} --pop ${pop_vcf} --min-snps ${params.orient_min_snps} \\
+        hybrid_merge.py --reads ${reads_vcf} --pop ${pop_vcf} --min-snps ${params.orient_min_snps} ${blockErrorArg()} \\
             --blocks orientation_${combo}_${chrom}.tsv
         rm -f input_${chrom}.vcf.gz*
         """
@@ -41,7 +47,7 @@ process HYBRID_MERGE {
         """
         # flip each read block as a whole to agree with the population phase;
         # SNPs outside the panel keep their read phase, panel-only SNPs take the population phase
-        hybrid_merge.py --reads ${reads_vcf} --pop ${pop_vcf} --min-snps ${params.orient_min_snps} \\
+        hybrid_merge.py --reads ${reads_vcf} --pop ${pop_vcf} --min-snps ${params.orient_min_snps} ${blockErrorArg()} \\
             --out ${out}.vcf.gz --blocks orientation_${combo}_${chrom}.tsv
         tabix -f -p vcf ${out}.vcf.gz
         """
@@ -79,7 +85,7 @@ process JUNCTION_SCORE {
     script:
     """
     # re-join the artificially split blocks with the population phase only, then check against the reads
-    hybrid_merge.py --reads ${split_vcf} --pop ${pop_vcf} --min-snps ${params.orient_min_snps} \\
+    hybrid_merge.py --reads ${split_vcf} --pop ${pop_vcf} --min-snps ${params.orient_min_snps} ${blockErrorArg()} \\
         --out rejoined.vcf.gz --blocks /dev/null
     junction_test.py score ${splits} ${reads_vcf} rejoined.vcf.gz junctions_${combo}_${chrom}.tsv
     rm -f rejoined.vcf.gz

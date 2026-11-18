@@ -58,3 +58,18 @@ PY
 printf "reads\tn\nall_primary\t1000000\nduplicate_flagged\t42000\n" > data/SYNTHETIC.duplicates.tsv
 python3 $B/phasing_report.py --data data --fai ref.fa.fai --out report
 echo "Report: $T/report/phasing_report.html"
+
+# soft read blocks (--block-error, like SHAPEIT4 --use-PS): planted read switch errors should be repaired
+cd "$T"
+python3 $B/hybrid_merge.py --reads reads.vcf.gz --pop pop.vcf.gz --out soft.vcf.gz --blocks soft_blocks.tsv --block-error 0.001
+python3 -c "import pysam; pysam.tabix_index('soft.vcf.gz', preset='vcf', force=True)"
+python3 ../mock_whatshap_compare.py truth.vcf.gz final.vcf.gz hard hard.truth.tsv hard.bed
+python3 ../mock_whatshap_compare.py truth.vcf.gz soft.vcf.gz soft soft.truth.tsv soft.bed
+python3 - <<'PY'
+import pandas as pd
+h, s = pd.read_csv("hard.truth.tsv", sep="\t"), pd.read_csv("soft.truth.tsv", sep="\t")
+sh, ss = h.all_switches.sum(), s.all_switches.sum()
+print(f"switches vs truth: intact read blocks {sh}, soft read blocks {ss}")
+assert ss < sh, "soft read blocks did not reduce switch errors"
+print("OK: soft read blocks reduce switch errors")
+PY

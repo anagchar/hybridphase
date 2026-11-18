@@ -44,9 +44,11 @@ To use a panel outside the container: `--panel_dir`, `--panel_name '{chr}.bcf'`,
 - `longphase`: `longphase phase --ont` (or `--pb` with `--platform hifi`)
 
 **Population phasers** (`--pop_phaser`, per chromosome)
-- `shapeit4`: `--use-PS 0.001 --sequencing`. Read blocks are kept intact and oriented with the panel.
-- `beagle`: Beagle 5 with `impute=false`. It cannot use read blocks, so it phases the het SNPs from the
-  panel alone (one run per chromosome, shared by all read phasers).
+- `shapeit4`: `--use-PS 0.001 --sequencing`. Read blocks are soft constraints with an expected error rate of
+  0.001: SHAPEIT4 keeps them unless the panel confidently disagrees, and links them with the panel.
+- `beagle` (🚧 **under development**, tested on simulated data only): Beagle 5 with `impute=false`. Beagle ignores
+  phase sets, so it phases the het SNPs from the panel alone (one run per chromosome, shared by all read
+  phasers); the reads come in at the merge step below.
 - `none`: read blocks only.
 
 Normally you pick one of each (default: WhatsHap + SHAPEIT4). A comma-separated list runs several
@@ -55,8 +57,12 @@ combinations side by side, e.g. to try them on a new data type.
 **Hybrid merge** (`--hybrid_merge`)
 - `orient` (default): `bin/hybrid_merge.py` flips each read block as a whole to the majority orientation of
   the population phase at the SNPs both share (≥ `--orient_min_snps`). SNPs outside the panel keep their
-  read phase, panel SNPs outside read blocks take the population phase. The read phaser's blocks are never
-  changed, so this works the same way for WhatsHap and LongPhase.
+  read phase, panel SNPs outside read blocks take the population phase. Like SHAPEIT4's `--use-PS`, read
+  blocks are soft constraints (`--read_block_error`, default = `--shapeit4_use_ps`): along each block the
+  agree/disagree pattern is decoded with a two-state model, and where a long enough run of SNPs confidently
+  disagrees with the population phase (a likely read switch error) the block is split and the parts are
+  oriented separately. Single disagreeing SNPs never split a block. `--read_block_error 0` keeps every read
+  block intact. This works the same way for WhatsHap and LongPhase, and for SHAPEIT4 and Beagle.
 - `whatshap`: `whatshap phase` with the reads and the population VCF as an
   extra pseudo-read. With LongPhase as read phaser this re-phases the reads with WhatsHap.
 
@@ -143,6 +149,7 @@ pipeline_info/          Nextflow timeline, report, trace, DAG
 | `--min_qual / --min_dp / --min_vaf / --max_vaf` | 20 / 15 / 0.25 / 0.75 | het SNP filter |
 | `--shapeit4_use_ps` | 0.001 | |
 | `--orient_min_snps` | 2 | |
+| `--read_block_error` | = `--shapeit4_use_ps` | read blocks as soft constraints in the merge; 0 = keep blocks intact |
 | `--junction_test` | true | |
 | `--haplotag` | true | |
 | `--hap1 / --hap2` | – | haplotype-resolved assembly: assembly haplotagging + truth benchmark |

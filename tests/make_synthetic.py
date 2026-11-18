@@ -57,8 +57,10 @@ for c, (pos, hap) in sites.items():
         k = int(rng.geometric(1 / 25))
         flip = rng.random() < 0.5
         ps = pos[i]
+        # 15% of larger blocks carry one read switch error somewhere inside (the rest of the block is swapped)
+        sw = i + int(rng.integers(3, k - 2)) if k >= 10 and rng.random() < 0.15 else None
         for j in range(i, min(i + k, len(pos))):
-            h = hap[j] ^ flip ^ (rng.random() < 0.002)
+            h = hap[j] ^ flip ^ (rng.random() < 0.002) ^ (sw is not None and j >= sw)
             if k == 1:
                 reads.append((c, pos[j], (0, 1), False, None))
             else:

@@ -7,7 +7,9 @@ First release.
 - Clair3 variant calling in front (or `--vcf` to reuse calls)
 - removal of duplicate-flagged (0x400) reads before calling and phasing
 - read phasing with WhatsHap or LongPhase; population phasing with SHAPEIT4 or Beagle
-- block-orientation hybrid merge (`bin/hybrid_merge.py`) next to the original WhatsHap re-phasing step
+- block-orientation hybrid merge (`bin/hybrid_merge.py`) with read blocks as soft constraints (`--read_block_error`,
+  like SHAPEIT4 `--use-PS`), next to the WhatsHap re-phasing step
+- Beagle as population phaser (under development)
 - truth-free QC: junction masking test, read-block vs population agreement, haplotype read fractions
 - haplotagging with WhatsHap or LongPhase
 - optional haplotagging with a haplotype-resolved assembly via HipHap (`--hap1/--hap2`; under development), with

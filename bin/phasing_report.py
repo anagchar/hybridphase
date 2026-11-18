@@ -386,7 +386,10 @@ def section_orientation(R, d, chroms, lens, combos, colors, kpi):
             axes[0].plot(x, joined.values, color=colors[c], marker="o", ms=4, label=pretty(c))
             axes[1].plot(x, conc.values, color=colors[c], marker="o", ms=4, label=pretty(c))
             snp_w = (o.joined * o.n_snps).sum() / o.n_snps.sum() * 100
-            rows.append(dict(method=pretty(c), read_blocks=len(o), oriented=int(o.joined.sum()),
+            n_split = int(o.loc[o.part > 0, "parent_ps"].nunique()) if "part" in o else 0
+            n_blocks = len(o) - int((o.part > 0).sum()) if "part" in o else len(o)
+            rows.append(dict(method=pretty(c), read_blocks=n_blocks, split_by_population=n_split,
+                             parts_oriented=int(o.joined.sum()),
                              snps_in_oriented_blocks_pct=round(snp_w, 2),
                              median_concordance_pct=round(o.loc[o.joined == 1, "conc"].median() * 100, 2),
                              blocks_below_70pct=int(((o.joined == 1) & (o.conc < 0.7)).sum())))
@@ -404,7 +407,8 @@ def section_orientation(R, d, chroms, lens, combos, colors, kpi):
         items.append(("fig", R.fig(fig, "09_orientation_vs_block_size"),
                       "Small blocks share few SNPs with the panel and are harder to orient. Inside an oriented "
                       "block, agreement below 100% means read phase and population phase disagree at some SNPs "
-                      "(population switch errors, or read phasing errors)."))
+                      "(population switch errors, or read phasing errors). With --read_block_error, blocks where a "
+                      "long run of SNPs confidently disagrees are split first (split_by_population)."))
         t = pd.DataFrame(rows)
         R.table(t, "09_block_orientation")
         items.append(("table", t, "Read blocks vs population phase."))
