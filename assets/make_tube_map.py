@@ -191,8 +191,6 @@ def main():
                            linestyle=(0, (1.4, 0.9)) if dsh else "-"))
         ax.text(lx + 74, yy, lab, va="center", fontsize=12, fontweight="bold", color=INK)
     ax.text(70, 985, "hybridphase", fontsize=34, fontweight="bold", color=SHARED, va="center")
-    ax.text(70, 1025, "every read × population combination runs; the report compares them", fontsize=12.5,
-            color="#52514e", va="center")
 
     fig.savefig(OUT + ".svg", facecolor="white")
     fig.savefig(OUT + ".png", facecolor="white", dpi=150)
