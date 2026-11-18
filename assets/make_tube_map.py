@@ -25,6 +25,8 @@ SHAPEIT4 = "#eb6834"
 BEAGLE = "#eda100"
 QC = "#6250d6"
 CELLS = "#e87ba4"
+ASM = "#e34948"
+TOP = -170                # extra room above row 1 for the assembly line
 TOOL = "#1c7c54"
 INK = "#0b0b0b"
 
@@ -91,10 +93,10 @@ def end_bar(ax, x, y, vertical):
 
 def main():
     plt.rcParams.update({"font.family": ["Arial", "Helvetica", "DejaVu Sans"]})
-    fig = plt.figure(figsize=(W / 100, H / 100), dpi=100)
+    fig = plt.figure(figsize=(W / 100, (H - TOP) / 100), dpi=100)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, W)
-    ax.set_ylim(H, 0)
+    ax.set_ylim(H, TOP)
     ax.axis("off")
 
     Y1, Y2 = 380, 820        # main rows
@@ -119,6 +121,21 @@ def main():
     track(ax, [(1330, Y1), (XR, Y1), (XR, Y2), (430, Y2)], SHARED, z=4, lw=LW + 1.5)
     track(ax, [(XR, 560), (XR, 600), (XR - 60, QY), (760, QY), (700, Y2)], QC, z=1)
     track(ax, [(XR, 690), (1660, 690), (1660, 1000), (1580, 1000)], CELLS, dashed=True, z=1)
+    # optional: haplotagging by mapping the reads to the diploid assembly
+    YA = -20
+    track(ax, [(150, Y1), (150, YA), (1700, YA)], ASM, dashed=True, z=1)
+    track(ax, [(760, -78), (760, YA)], ASM, z=1)
+    for x, name, tool in [(430, "Reads to FASTQ\n(tags kept)", "samtools fastq"),
+                          (760, "Map to hap1 + hap2", "minimap2"),
+                          (1080, "Assign haplotype\nper read", "alignment score"),
+                          (1400, "Tag GRCh38 BAM", "HP / ha / hd tags")]:
+        stop(ax, x, YA)
+        label(ax, x, YA + 32, name, tool, va="top")
+    file_icon(ax, 760, -118, "FASTA")
+    label(ax, 698, -118, "haplotype-resolved\nassembly (hap1, hap2)", va="center", ha="right")
+    end_bar(ax, 1700, YA, False)
+    file_icon(ax, 1752, YA, "BAM")
+    label(ax, 1752, YA + 58, "assembly-\nhaplotagged BAM", va="top")
     track(ax, [(345, Y1), (345, 245)], SHARED, z=1)                 # Clair3 VCF out
     track(ax, [(XR, 560), (1580, 560)], SHARED, z=1)                # phased VCF out
     track(ax, [(1330, Y2), (1330, 880)], SHARED, z=1)               # haplotagged BAM out
@@ -185,7 +202,8 @@ def main():
     items = [(SHARED, "Shared path", False), (WHATSHAP, "Read phasing: WhatsHap", False),
              (LONGPHASE, "Read phasing: LongPhase", False), (SHAPEIT4, "Population phasing: SHAPEIT4", False),
              (BEAGLE, "Population phasing: Beagle", False), (QC, "QC and benchmarking", False),
-             (CELLS, "Optional: single cell (--barcodes)", True)]
+             (CELLS, "Optional: single cell (--barcodes)", True),
+             (ASM, "Optional: assembly haplotagging (--hap1/--hap2)", True)]
     for i, (c, lab, dsh) in enumerate(items):
         yy = ly + 36 + i * 26
         ax.add_line(Line2D([lx, lx + 60], [yy, yy], color=c, lw=LW * 0.8, solid_capstyle="butt",

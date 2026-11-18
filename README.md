@@ -78,14 +78,32 @@ allele count tables (bash steps 4–5).
 | **Junction test** | masking benchmark (`bin/junction_test.py`): every read block with ≥ 10 SNPs is split in two, the population phaser re-joins the halves blind, and the reads say which way is right. Error rate per gap size, with the gap distribution of the real block junctions next to it |
 | Method agreement | pairwise switch rate and block-wise Hamming between all combinations |
 | Haplotagged BAM | % reads H1 / H2 / untagged per chromosome; H1 read fraction in 1 Mb bins along the genome. Normal tissue sits at 0.5; CNAs / LOH move whole segments away from it, and switch errors show as jumps between mirrored levels |
+| Assembly haplotagging | optional, see below: assignment per read length, H1 fraction along the genome, per-cell counts, agreement with the VCF-based haplotags |
 | Assembly truth | optional, see below: accuracy against a truth from a diploid assembly |
 | Single cells | covered SNPs and depth per cell (with `--barcodes`) |
 
+## Optional: haplotagging with a haplotype-resolved assembly
+
+With `--hap1 / --hap2` (the two haplotype FASTAs of a diploid assembly of the same individual) the reads are
+also tagged **directly from the assembly**, without variant calling or statistical phasing:
+
+1. hap1 and hap2 are combined into one diploid reference (contigs renamed `h1_*` / `h2_*`) and indexed with minimap2
+2. the primary reads of the input BAM are extracted (`CB` / `UB` tags kept) and mapped to it, with secondary alignments
+3. per read, the best alignment score on hap1 is compared with the best on hap2: a difference of at least
+   `--asm_min_diff` (default 6, about one het SNV for the ONT scoring) assigns H1 or H2; equal scores
+   (homozygous stretches, short fragments without a het site) leave the read unassigned
+4. the original GRCh38 BAM gets `HP:i` (1/2), `ha:Z` (assembly contig) and `hd:i` (score difference)
+
+This works for long-read BAMs and for BAMs with a mix of short and long fragments (single-cell DNA); the report
+shows the assigned share per read length, the H1 fraction along the genome, per-cell H1/H2 counts when
+reads carry `CB`, and the per-read agreement with the VCF-based haplotags. H1/H2 are consistent along a whole
+chromosome only if the assembly is phased chromosome-wide (trio or Hi-C); otherwise per contig (`ha` tag).
+Turn it off with `--assembly_haplotag false`.
+
 ## Optional: benchmark against an assembly truth
 
-If a **haplotype-resolved diploid assembly** of the same individual exists (two haplotype FASTAs, e.g.
-hifiasm `hap1`/`hap2` or trio `pat`/`mat`), the pipeline builds a truth set with dipcall and compares every
-phased VCF of the run (read-only and hybrid) against it:
+The same `--hap1 / --hap2` also give a truth set (dipcall), against which every phased VCF of the run
+(read-only and hybrid) is compared (`--assembly_truth false` to skip):
 
 ```bash
 --hap1 asm.hap1.fa --hap2 asm.hap2.fa            # dipcall -> truth VCF + confident regions
@@ -107,6 +125,8 @@ chromosome, and a mosaic of where each chromosome is phased like the truth or ha
   04_qc/                phasing_report.html, figures/, tables/, junction_test/, block_orientation/, method_concordance.tsv,
                         truth/ (optional: dipcall truth, whatshap compare per VCF)
   05_haplotag/          <sample>.<combo>.haplotagged.bam(.bai), haplotag list, haplotag_counts.tsv
+    assembly/           <sample>.assembly_haplotagged.bam, <sample>.asm.bam (reads on hap1+hap2), per-read assignments,
+                        per-cell H1/H2 counts (optional)
   06_single_cell/       cellsnp/, ascat_allele_counts/ (optional)
 pipeline_info/          Nextflow timeline, report, trace, DAG
 ```
@@ -122,7 +142,8 @@ pipeline_info/          Nextflow timeline, report, trace, DAG
 | `--orient_min_snps` | 2 | |
 | `--junction_test` | true | |
 | `--haplotag` | true | |
-| `--hap1 / --hap2` | – | haplotype-resolved assembly for the truth benchmark |
+| `--hap1 / --hap2` | – | haplotype-resolved assembly: assembly haplotagging + truth benchmark |
+| `--asm_min_diff` | 6 | alignment-score difference needed to assign a read to a haplotype |
 | `--truth_vcf / --truth_bed` | – | existing truth instead of dipcall |
 
 All parameters with comments: `nextflow.config`. Resources per step: `conf/base.config`.

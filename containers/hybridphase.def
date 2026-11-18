@@ -38,6 +38,7 @@ From: condaforge/miniforge3:latest
         bcftools=1.21 \
         htslib=1.21 \
         samtools=1.21 \
+        minimap2 \
         whatshap=2.3 \
         longphase \
         beagle \
@@ -57,6 +58,7 @@ From: condaforge/miniforge3:latest
     # fail the build here if a tool does not run
     /usr/local/bin/shapeit4 --help > /dev/null
     /opt/conda/envs/hybridphase/bin/longphase --version
+    /opt/conda/envs/hybridphase/bin/minimap2 --version
     /opt/conda/envs/hybridphase/bin/beagle 2>&1 | head -n 2
     /opt/conda/envs/hybridphase/bin/python -c "import pysam, pandas, matplotlib"
 
@@ -98,7 +100,7 @@ From: condaforge/miniforge3:latest
     exec "$@"
 
 %help
-    Environment for hybridphase: bcftools / samtools / htslib 1.21, WhatsHap 2.3, LongPhase,
+    Environment for hybridphase: bcftools / samtools / htslib 1.21, minimap2, WhatsHap 2.3, LongPhase,
     SHAPEIT4 4.2.2, Beagle 5, cellsnp-lite 1.2.3, R 4.3.2 (Matrix, data.table), python 3.10
     (pysam, pandas, matplotlib).
 

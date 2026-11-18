@@ -19,6 +19,7 @@ include { HYBRID_MERGE; JUNCTION_SPLIT; JUNCTION_SCORE;
 include { HAPLOTAG; HAPLOTAG_COUNTS }                    from './modules/local/haplotag'
 include { CELLSNP; ASCAT_TABLES }                        from './modules/local/single_cell'
 include { DIPCALL; TRUTH_CONFIDENT; COMPARE_TRUTH }       from './modules/local/truth'
+include { ASM_INDEX; ASM_MAP; ASM_ASSIGN; ASM_TAG }     from './modules/local/assembly_haplotag'
 include { REPORT }                                       from './modules/local/report'
 
 // '1-22' / '21,22' / 'chr1-chr5,X' -> [chr1, ...]
@@ -75,7 +76,8 @@ workflow {
      chromosomes   : ${chroms.first()} .. ${chroms.last()} (${chroms.size()})
      combinations  : ${combos.join(', ')}  (merge: ${params.hybrid_merge})
      drop dups     : ${params.drop_duplicates}
-     truth         : ${params.hap1 ? 'dipcall on --hap1/--hap2' : params.truth_vcf ?: 'none'}
+     truth         : ${params.hap1 && params.assembly_truth ? 'dipcall on --hap1/--hap2' : params.truth_vcf ?: 'none'}
+     assembly tags : ${params.hap1 && params.assembly_haplotag ? 'map reads to --hap1 + --hap2' : 'no'}
      haplotag      : ${params.haplotag ? "${ht_combo} with ${params.haplotag_tool}" : 'no'}
      outdir        : ${params.outdir}/${params.sample}
     ==============================================================
@@ -207,7 +209,7 @@ workflow {
         .collectFile(keepHeader: true, storeDir: "${params.outdir}/${params.sample}/04_qc/block_orientation") { combo, c, f -> ["orientation_${combo}.tsv", f] }
 
     // ---------------------------------------------------------------- 6b. optional truth benchmark
-    if (params.hap1 || params.truth_vcf) {
+    if ((params.hap1 && params.assembly_truth) || params.truth_vcf) {
         if (params.hap1) {
             DIPCALL(Channel.value([file(params.hap1, checkIfExists: true), file(params.hap2, checkIfExists: true)]), ch_ref)
             ch_truth_raw = DIPCALL.out.truth
@@ -233,6 +235,19 @@ workflow {
         ch_ht_counts = Channel.empty()
     }
 
+    // ---------------------------------------------------------------- 7b. optional assembly-based haplotagging
+    if (params.hap1 && params.assembly_haplotag) {
+        ASM_INDEX(Channel.value([file(params.hap1, checkIfExists: true), file(params.hap2, checkIfExists: true)]))
+        ASM_MAP(ch_bam_in, ASM_INDEX.out.mmi)
+        ASM_ASSIGN(ASM_MAP.out.bam)
+        // tag the VCF-haplotagged BAM when there is one: its HP/PS give the agreement table, then get replaced
+        ASM_TAG(ASM_ASSIGN.out.assignments, params.haplotag ? HAPLOTAG.out.bam.map { c, b, i -> [b, i] } : ch_bam_in)
+        ch_asm_files = ASM_ASSIGN.out.by_length.mix(ASM_ASSIGN.out.as_diff, ASM_TAG.out.bins, ASM_TAG.out.agreement,
+                                                    ASM_TAG.out.cells)
+    } else {
+        ch_asm_files = Channel.empty()
+    }
+
     // ---------------------------------------------------------------- 8. optional single-cell allele counts
     if (params.barcodes) {
         CELLSNP(ch_ht_vcf, ch_bam_in, file(params.barcodes, checkIfExists: true))
@@ -248,7 +263,7 @@ workflow {
         variant_calls: params.vcf ?: "Clair3 ${params.clair3_model}".toString(),
         platform: params.platform, drop_duplicates: params.drop_duplicates, chroms: chroms, combos: combos, hybrid_merge: params.hybrid_merge,
         haplotag_combo: params.haplotag ? ht_combo : null, haplotag_tool: params.haplotag_tool,
-        haplotag_bin_mb: params.haplotag_bin_mb,
+        haplotag_bin_mb: params.haplotag_bin_mb, asm_min_diff: params.asm_min_diff,
         truth: params.hap1 ? "dipcall: ${params.hap1} + ${params.hap2}".toString() : params.truth_vcf,
         filters: [min_qual: params.min_qual, min_dp: params.min_dp, min_vaf: params.min_vaf, max_vaf: params.max_vaf],
         version: workflow.manifest.version, run_name: workflow.runName, started: workflow.start.toString()
@@ -258,7 +273,7 @@ workflow {
         .mix(FILTER_HET_SNPS.out.calls, FILTER_HET_SNPS.out.kept)
         .mix(CONCAT_PHASED.out.stats.flatMap { id, s, b -> [s, b] })
         .mix(COMPARE_READS_FINAL.out.tsv.flatMap { id, t, b -> [t, b] })
-        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc, ch_dup_tsv, ch_truth_files)
+        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc, ch_dup_tsv, ch_truth_files, ch_asm_files)
         .collect()
 
     REPORT(ch_report_files, fai, run_info)
