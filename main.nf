@@ -18,6 +18,7 @@ include { HYBRID_MERGE; JUNCTION_SPLIT; JUNCTION_SCORE;
           METHOD_CONCORDANCE }                           from './modules/local/hybrid'
 include { HAPLOTAG; HAPLOTAG_COUNTS }                    from './modules/local/haplotag'
 include { CELLSNP; ASCAT_TABLES }                        from './modules/local/single_cell'
+include { DIPCALL; TRUTH_CONFIDENT; COMPARE_TRUTH }       from './modules/local/truth'
 include { REPORT }                                       from './modules/local/report'
 
 // '1-22' / '21,22' / 'chr1-chr5,X' -> [chr1, ...]
@@ -53,6 +54,8 @@ workflow {
     if (bad_r) error "Unknown --read_phaser: ${bad_r}. Use whatshap and/or longphase"
     if (bad_p) error "Unknown --pop_phaser: ${bad_p}. Use shapeit4, beagle and/or none"
     if (!(params.hybrid_merge in ['orient', 'whatshap'])) error "--hybrid_merge must be orient or whatshap"
+    if ((params.hap1 && !params.hap2) || (params.hap2 && !params.hap1)) error "--hap1 and --hap2 go together (haplotype-resolved assembly)"
+    if (params.truth_vcf && params.hap1) error "Give either --hap1/--hap2 or --truth_vcf, not both"
     if (!(params.haplotag_tool in ['whatshap', 'longphase'])) error "--haplotag_tool must be whatshap or longphase"
 
     def chroms     = parseChroms(params.chroms, params.chr_prefix)
@@ -72,6 +75,7 @@ workflow {
      chromosomes   : ${chroms.first()} .. ${chroms.last()} (${chroms.size()})
      combinations  : ${combos.join(', ')}  (merge: ${params.hybrid_merge})
      drop dups     : ${params.drop_duplicates}
+     truth         : ${params.hap1 ? 'dipcall on --hap1/--hap2' : params.truth_vcf ?: 'none'}
      haplotag      : ${params.haplotag ? "${ht_combo} with ${params.haplotag_tool}" : 'no'}
      outdir        : ${params.outdir}/${params.sample}
     ==============================================================
@@ -202,6 +206,23 @@ workflow {
     ch_orientation = HYBRID_MERGE.out.orientation
         .collectFile(keepHeader: true, storeDir: "${params.outdir}/${params.sample}/04_qc/block_orientation") { combo, c, f -> ["orientation_${combo}.tsv", f] }
 
+    // ---------------------------------------------------------------- 6b. optional truth benchmark
+    if (params.hap1 || params.truth_vcf) {
+        if (params.hap1) {
+            DIPCALL(Channel.value([file(params.hap1, checkIfExists: true), file(params.hap2, checkIfExists: true)]), ch_ref)
+            ch_truth_raw = DIPCALL.out.truth
+        } else {
+            ch_truth_raw = Channel.value([file(params.truth_vcf, checkIfExists: true),
+                                          params.truth_bed ? file(params.truth_bed, checkIfExists: true) : file("${projectDir}/assets/NO_FILE")])
+        }
+        TRUTH_CONFIDENT(ch_truth_raw)
+        // every phased VCF of the run: read-only blocks and all hybrid combinations
+        COMPARE_TRUTH(CONCAT_PHASED.out.vcf.combine(TRUTH_CONFIDENT.out.vcf))
+        ch_truth_files = COMPARE_TRUTH.out.tsv.flatMap { id, t, b -> [t, b] }
+    } else {
+        ch_truth_files = Channel.empty()
+    }
+
     // ---------------------------------------------------------------- 7. haplotag
     ch_ht_vcf = ch_final.filter { it[0] == ht_combo }
     if (params.haplotag) {
@@ -228,6 +249,7 @@ workflow {
         platform: params.platform, drop_duplicates: params.drop_duplicates, chroms: chroms, combos: combos, hybrid_merge: params.hybrid_merge,
         haplotag_combo: params.haplotag ? ht_combo : null, haplotag_tool: params.haplotag_tool,
         haplotag_bin_mb: params.haplotag_bin_mb,
+        truth: params.hap1 ? "dipcall: ${params.hap1} + ${params.hap2}".toString() : params.truth_vcf,
         filters: [min_qual: params.min_qual, min_dp: params.min_dp, min_vaf: params.min_vaf, max_vaf: params.max_vaf],
         version: workflow.manifest.version, run_name: workflow.runName, started: workflow.start.toString()
     ]))
@@ -236,7 +258,7 @@ workflow {
         .mix(FILTER_HET_SNPS.out.calls, FILTER_HET_SNPS.out.kept)
         .mix(CONCAT_PHASED.out.stats.flatMap { id, s, b -> [s, b] })
         .mix(COMPARE_READS_FINAL.out.tsv.flatMap { id, t, b -> [t, b] })
-        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc, ch_dup_tsv)
+        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc, ch_dup_tsv, ch_truth_files)
         .collect()
 
     REPORT(ch_report_files, fai, run_info)

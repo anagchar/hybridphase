@@ -158,8 +158,9 @@ def main():
     label(ax, 1528, 938, "per-cell\nallele counts")
 
     # ---------------- QC line
-    for x, name, tool in [(1250, "Junction test", "masked block joins"),
-                          (1000, "Phase stats &\nmethod agreement", "WhatsHap compare")]:
+    for x, name, tool in [(1300, "Junction test", "masked block joins"),
+                          (1105, "Phase stats &\nmethod agreement", "WhatsHap compare"),
+                          (900, "Assembly truth\n(optional)", "dipcall + WhatsHap")]:
         stop(ax, x, QY)
         label(ax, x, QY - 30, name)
         ax.text(x, QY + 32, tool, ha="center", va="center", fontsize=12.5, fontweight="bold", color=TOOL)

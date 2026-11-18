@@ -74,6 +74,9 @@ for c, (pos, hap) in sites.items():
             pop.append((c, p, (h, 1 - h), True, None))
 
 write(os.path.join(OUT, "het.vcf.gz"), het)
+# truth from the "assembly": the true haplotypes, phased, no PS (like dipcall)
+write(os.path.join(OUT, "truth.vcf.gz"), [(c, p, (int(h), 1 - int(h)), True, None)
+                                          for c, (pos, hap) in sites.items() for p, h in zip(pos, hap)])
 write(os.path.join(OUT, "reads.vcf.gz"), reads)
 write(os.path.join(OUT, "pop.vcf.gz"), pop)
 

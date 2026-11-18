@@ -604,6 +604,126 @@ def section_haplotag(R, d, chroms, lens, kpi, primary, tool, bin_mb=1):
     R.add("6 · Haplotagged BAM", "Reads assigned to haplotypes with the final phased VCF.", items)
 
 
+def truth_runs(ivs):
+    """switch-error intervals -> (long-range switches, flips); a flip = two intervals sharing an SNV"""
+    longs, flips = [], []
+    if not ivs:
+        return longs, flips
+    ivs = sorted(ivs)
+    run = [ivs[0]]
+    for prev, cur in zip(ivs, ivs[1:]):
+        if prev[1] - cur[0] in (0, 1):
+            run.append(cur)
+            continue
+        longs, flips = _close(run, longs, flips)
+        run = [cur]
+    return _close(run, longs, flips)
+
+
+def _close(run, longs, flips):
+    for i in range(0, len(run) - 1, 2):
+        flips.append(run[i][1])
+    if len(run) % 2:
+        longs.append(((run[0][0] + run[-1][1]) / 2))
+    return longs, flips
+
+
+def section_truth(R, d, chroms, lens, ids, colors, combos, kpi):
+    tabs = {i: read_tsv(f) for i, f in by_suffix(d, ".truth.tsv").items()}
+    tabs = {i: t for i, t in tabs.items() if t is not None and len(t)}
+    if not tabs:
+        return
+    order = [i for i in ids if i in tabs]
+    items, rows = [], []
+    beds = {i: read_tsv(os.path.join(d, f"{i}.truth_switches.bed"), header=None, usecols=[0, 1, 2],
+                        names=["chrom", "s", "e"]) for i in order}
+    per = {}
+    for i in order:
+        t = tabs[i].set_index("chromosome").reindex(chroms)
+        per[i] = t
+        b = beds.get(i)
+        nl = nf = 0
+        if b is not None:
+            for c in chroms:
+                lo, fl = truth_runs([tuple(x) for x in b.loc[b.chrom == c, ["s", "e"]].to_numpy()])
+                nl, nf = nl + len(lo), nf + len(fl)
+        pairs = t.all_assessed_pairs.sum()
+        rows.append(dict(method=pretty(i), assessed_pairs=int(pairs), switches=int(t.all_switches.sum()),
+                         switch_rate_pct=round(100 * t.all_switches.sum() / pairs, 4) if pairs else np.nan,
+                         long_range_switches=nl, flips=nf,
+                         blockwise_hamming_pct=round(100 * t.blockwise_hamming.sum() / t.covered_variants.sum(), 3)
+                         if "blockwise_hamming" in t and t.covered_variants.sum() else np.nan))
+    tab = pd.DataFrame(rows)
+    R.table(tab, "16_truth_summary")
+    items.append(("table", tab, "Against the truth from the assembly (confident regions, SNVs only). Block-wise "
+                                "Hamming = % of SNVs on the wrong haplotype within each phase block."))
+    fin = tab[[i in combos for i in order]]
+    if len(fin):
+        best = fin.sort_values("blockwise_hamming_pct").iloc[0]
+        kpi.append(("Hamming vs assembly truth", f"{best.blockwise_hamming_pct:.2f}%", f"best: {best.method}"))
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.1))
+    x = np.arange(len(chroms))
+    for i in order:
+        t = per[i]
+        ls = (0, (3, 2)) if i.endswith("_reads") else "-"
+        axes[0].plot(x, 100 * t.all_switches / t.all_assessed_pairs, color=colors.get(i, OTHER), ls=ls,
+                     marker="o", ms=3.5, lw=1.6, label=pretty(i))
+        if "blockwise_hamming_rate" in t:
+            axes[1].plot(x, 100 * t.blockwise_hamming_rate, color=colors.get(i, OTHER), ls=ls, marker="o", ms=3.5,
+                         lw=1.6, label=pretty(i))
+    for ax, yl, ti in [(axes[0], "switch rate (%)", "Switch error rate per chromosome"),
+                       (axes[1], "block-wise Hamming (%)", "SNVs on the wrong haplotype")]:
+        ax.set_xticks(x, [c.replace("chr", "") for c in chroms], fontsize=7.5)
+        ax.set_ylabel(yl)
+        ax.grid(axis="x", visible=False)
+        ax.set_title(ti)
+    legend_below(axes[0], ncol=2)
+    fig.tight_layout()
+    items.append(("fig", R.fig(fig, "16_truth_per_chrom"),
+                  "Dashed = read-only blocks (short, so few long-range errors are possible), solid = hybrid."))
+
+    # orientation mosaic of the hybrid results along each chromosome
+    mos = [i for i in order if i in combos and not i.endswith("_none") and beds.get(i) is not None]
+    if mos:
+        xmax = lens.reindex(chroms).max() / 1e6
+        fig, axes = plt.subplots(1, len(mos), figsize=(6.0 * len(mos), 0.24 * len(chroms) + 1.6), sharey=True,
+                                 squeeze=False)
+        for ax, i in zip(axes[0], mos):
+            b = beds[i]
+            for y, c in enumerate(chroms):
+                L = lens.get(c, 0)
+                lo, fl = truth_runs([tuple(v) for v in b.loc[b.chrom == c, ["s", "e"]].to_numpy()])
+                edges = [0] + sorted(lo) + [L]
+                seg = np.diff(edges)
+                # majority orientation (by length) = "like the truth"; the other one = haplotypes swapped
+                even = seg[0::2].sum() >= seg[1::2].sum()
+                for k, (a, e) in enumerate(zip(edges[:-1], edges[1:])):
+                    swapped = (k % 2 == 0) != even
+                    ax.barh(y, (e - a) / 1e6, left=a / 1e6, height=0.62, color=SERIES[1] if swapped else SERIES[0], lw=0)
+                if fl:
+                    ax.vlines(np.array(fl) / 1e6, y - 0.5, y - 0.33, color=INK, lw=0.5)
+                h = per[i].loc[c, "blockwise_hamming_rate"] if "blockwise_hamming_rate" in per[i] else np.nan
+                if np.isfinite(h):
+                    ax.text(xmax * 1.03, y, f"{100 * h:.0f}%", va="center", fontsize=8, color=INK2)
+            ax.set_title(pretty(i))
+            ax.set_xlim(0, xmax * 1.12)
+            ax.set_ylim(len(chroms) - 0.4, -0.9)
+            ax.set_xlabel("position (Mb)")
+            ax.grid(axis="y", visible=False)
+        axes[0][0].set_yticks(range(len(chroms)), [c.replace("chr", "") for c in chroms])
+        fig.legend(handles=[Patch(color=SERIES[0], label="phased like the truth (majority orientation)"),
+                            Patch(color=SERIES[1], label="haplotypes swapped")],
+                   loc="lower left", ncol=2, bbox_to_anchor=(0.01, -0.04), frameon=False)
+        fig.tight_layout(rect=(0, 0.04, 1, 1))
+        items.append(("fig", R.fig(fig, "17_truth_mosaic"),
+                      "Each long-range switch flips the orientation; black ticks = single-SNV flips; right = block-wise "
+                      "Hamming per chromosome. Regions without truth SNVs (e.g. centromeres) are not marked."))
+    R.add("7 · Comparison with the assembly truth",
+          "Optional: the phased VCFs compared with a truth set from a haplotype-resolved diploid assembly of the same "
+          "individual (dipcall), with WhatsHap compare.", items)
+
+
 def section_cells(R, d):
     q = read_tsv(os.path.join(d, "single_cell_allele_qc.tsv"))
     if q is None or not len(q):
@@ -623,7 +743,7 @@ def section_cells(R, d):
     axes[1].set_title("Depth vs covered SNPs")
     fig.tight_layout()
     desc = q[["covered_snps", "total_depth", "median_cov_per_covered_snp"]].describe().T.reset_index()
-    R.add("7 · Single-cell allele counts", "cellsnp-lite on the final phased SNPs (input for ASCAT.sc).",
+    R.add("8 · Single-cell allele counts", "cellsnp-lite on the final phased SNPs (input for ASCAT.sc).",
           [("fig", R.fig(fig, "15_cell_qc"), ""), ("table", desc.round(1), "")])
 
 
@@ -712,6 +832,7 @@ def main():
     section_junctions(R, d, combos, colors, kpi)
     section_concordance(R, d, combos, colors)
     section_haplotag(R, d, chroms, lens, kpi, primary, info.get("haplotag_tool", "whatshap"), info.get("haplotag_bin_mb", 1))
+    section_truth(R, d, chroms, lens, ids, colors, combos, kpi)
     section_cells(R, d)
     write_html(R, info, kpi, os.path.join(a.out, "phasing_report.html"))
     print("wrote", os.path.join(a.out, "phasing_report.html"))

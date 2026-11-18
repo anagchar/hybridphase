@@ -78,11 +78,24 @@ allele count tables (bash steps 4–5).
 | **Junction test** | masking benchmark (`bin/junction_test.py`): every read block with ≥ 10 SNPs is split in two, the population phaser re-joins the halves blind, and the reads say which way is right. Error rate per gap size, with the gap distribution of the real block junctions next to it |
 | Method agreement | pairwise switch rate and block-wise Hamming between all combinations |
 | Haplotagged BAM | % reads H1 / H2 / untagged per chromosome; H1 read fraction in 1 Mb bins along the genome. Normal tissue sits at 0.5; CNAs / LOH move whole segments away from it, and switch errors show as jumps between mirrored levels |
+| Assembly truth | optional, see below: accuracy against a truth from a diploid assembly |
 | Single cells | covered SNPs and depth per cell (with `--barcodes`) |
 
-The truth-based benchmark scripts of the COLO829BL analysis (`dipcall`, `whatshap compare` vs the
-assembly, `phasing_benchmark.py`, `mosaic.py`) are not part of the pipeline; they can be run on its output
-VCFs when a truth set exists.
+## Optional: benchmark against an assembly truth
+
+If a **haplotype-resolved diploid assembly** of the same individual exists (two haplotype FASTAs, e.g.
+hifiasm `hap1`/`hap2` or trio `pat`/`mat`), the pipeline builds a truth set with dipcall and compares every
+phased VCF of the run (read-only and hybrid) against it:
+
+```bash
+--hap1 asm.hap1.fa --hap2 asm.hap2.fa            # dipcall -> truth VCF + confident regions
+--dipcall_args '-x hs38.PAR.bed'                 # male samples: PAR handling (path inside the dipcall container)
+--truth_vcf truth.dip.vcf.gz --truth_bed truth.dip.bed   # or reuse an existing truth (dipcall skipped)
+```
+
+Only confident truth calls are used (inside the BED, unflagged), and `whatshap compare --only-snvs` is run per
+VCF. The report gets an extra section: switch, long-range switch and flip counts, block-wise Hamming per
+chromosome, and a mosaic of where each chromosome is phased like the truth or has its haplotypes swapped.
 
 ## Output
 
@@ -91,7 +104,8 @@ VCFs when a truth set exists.
   01_variant_calling/   Clair3 VCF, germline_het_snps.vcf.gz, filter QC
   02_read_phasing/<read_phaser>/          <read>_reads.phased.vcf.gz + stats
   03_hybrid_phasing/<read>_<pop>/         <read>_<pop>.phased.vcf.gz, phases_for_ascat.vcf.gz, stats, reads-vs-final compare
-  04_qc/                phasing_report.html, figures/, tables/, junction_test/, block_orientation/, method_concordance.tsv
+  04_qc/                phasing_report.html, figures/, tables/, junction_test/, block_orientation/, method_concordance.tsv,
+                        truth/ (optional: dipcall truth, whatshap compare per VCF)
   05_haplotag/          <sample>.<combo>.haplotagged.bam(.bai), haplotag list, haplotag_counts.tsv
   06_single_cell/       cellsnp/, ascat_allele_counts/ (optional)
 pipeline_info/          Nextflow timeline, report, trace, DAG
@@ -108,6 +122,8 @@ pipeline_info/          Nextflow timeline, report, trace, DAG
 | `--orient_min_snps` | 2 | |
 | `--junction_test` | true | |
 | `--haplotag` | true | |
+| `--hap1 / --hap2` | – | haplotype-resolved assembly for the truth benchmark |
+| `--truth_vcf / --truth_bed` | – | existing truth instead of dipcall |
 
 All parameters with comments: `nextflow.config`. Resources per step: `conf/base.config`.
 
