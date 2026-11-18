@@ -63,6 +63,17 @@ From: condaforge/miniforge3:latest
     /opt/conda/envs/hybridphase/bin/python -c "import pysam, pandas, matplotlib"
 
     mamba clean --all -f -y
+
+    # HipHap (assembly-based haplotagging, under development): static Linux binary from the GitHub release
+    HH=v0.2.0
+    HHT=hiphap-${HH}-x86_64-unknown-linux-musl
+    cd /tmp
+    wget -q https://github.com/jheinz27/hiphap/releases/download/${HH}/${HHT}.tar.gz \
+            https://github.com/jheinz27/hiphap/releases/download/${HH}/${HHT}.tar.gz.sha256
+    sha256sum -c ${HHT}.tar.gz.sha256
+    tar -xzf ${HHT}.tar.gz && mv ${HHT}/hiphap /usr/local/bin/hiphap && rm -rf ${HHT}*
+    /usr/local/bin/hiphap --help > /dev/null
+    cd /
     export PATH=/opt/conda/envs/hybridphase/bin:$PATH
 
     # 4. Reference data: copied in by %files, converted here, raw copies removed
@@ -100,7 +111,7 @@ From: condaforge/miniforge3:latest
     exec "$@"
 
 %help
-    Environment for hybridphase: bcftools / samtools / htslib 1.21, minimap2, WhatsHap 2.3, LongPhase,
+    Environment for hybridphase: bcftools / samtools / htslib 1.21, minimap2, HipHap 0.2.0, WhatsHap 2.3, LongPhase,
     SHAPEIT4 4.2.2, Beagle 5, cellsnp-lite 1.2.3, R 4.3.2 (Matrix, data.table), python 3.10
     (pysam, pandas, matplotlib).
 

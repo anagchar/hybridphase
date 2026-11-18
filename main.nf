@@ -7,19 +7,18 @@
  *                                            read blocks + population phase ── hybrid merge ── chromosome-scale phase
  *                                                                   ── haplotag BAM ── QC + HTML report
  *
- * Every combination of --read_phaser x --pop_phaser is run; the report compares them.
+ * Every combination of --read_phaser x --pop_phaser is run (usually one of each).
  */
 
 include { DROP_DUPLICATES; CLAIR3; FILTER_HET_SNPS }     from './modules/local/variant_calling'
 include { WHATSHAP_PHASE; LONGPHASE_PHASE }              from './modules/local/read_phasing'
 include { SHAPEIT4; BEAGLE }                             from './modules/local/pop_phasing'
 include { HYBRID_MERGE; JUNCTION_SPLIT; JUNCTION_SCORE;
-          CONCAT_PHASED; COMPARE_READS_FINAL;
-          METHOD_CONCORDANCE }                           from './modules/local/hybrid'
+          CONCAT_PHASED; COMPARE_READS_FINAL }                           from './modules/local/hybrid'
 include { HAPLOTAG; HAPLOTAG_COUNTS }                    from './modules/local/haplotag'
 include { CELLSNP; ASCAT_TABLES }                        from './modules/local/single_cell'
 include { DIPCALL; TRUTH_CONFIDENT; COMPARE_TRUTH }       from './modules/local/truth'
-include { ASM_INDEX; ASM_MAP; ASM_ASSIGN; ASM_TAG }     from './modules/local/assembly_haplotag'
+include { ASM_INDEX; ASM_MAP; HIPHAP; ASM_TAG }         from './modules/local/assembly_haplotag'
 include { REPORT }                                       from './modules/local/report'
 
 // '1-22' / '21,22' / 'chr1-chr5,X' -> [chr1, ...]
@@ -77,7 +76,7 @@ workflow {
      combinations  : ${combos.join(', ')}  (merge: ${params.hybrid_merge})
      drop dups     : ${params.drop_duplicates}
      truth         : ${params.hap1 && params.assembly_truth ? 'dipcall on --hap1/--hap2' : params.truth_vcf ?: 'none'}
-     assembly tags : ${params.hap1 && params.assembly_haplotag ? 'map reads to --hap1 + --hap2' : 'no'}
+     assembly tags : ${params.hap1 && params.assembly_haplotag ? 'HipHap on --hap1 / --hap2 (under development)' : 'no'}
      haplotag      : ${params.haplotag ? "${ht_combo} with ${params.haplotag_tool}" : 'no'}
      outdir        : ${params.outdir}/${params.sample}
     ==============================================================
@@ -184,14 +183,6 @@ workflow {
                 .combine(ch_reads_genome, by: 0)
                 .map { rp, id, v, t, rv, rt -> [id, v, t, rv, rt] })
 
-    if (combos.size() > 1) {
-        METHOD_CONCORDANCE(ch_final.toSortedList { a, b -> a[0] <=> b[0] }
-                                   .map { l -> [l.collect { it[0] }, l.collect { it[1] }, l.collect { it[2] }] })
-        ch_concordance = METHOD_CONCORDANCE.out.tsv
-    } else {
-        ch_concordance = Channel.empty()
-    }
-
     if (do_junction) {
         ch_junction_in = ch_reads.map { rp, c, v, t -> [[rp, c], v, t] }
             .join(JUNCTION_SPLIT.out.vcf.map { rp, c, v, t -> [[rp, c], v, t] })
@@ -239,11 +230,11 @@ workflow {
     if (params.hap1 && params.assembly_haplotag) {
         ASM_INDEX(Channel.value([file(params.hap1, checkIfExists: true), file(params.hap2, checkIfExists: true)]))
         ASM_MAP(ch_bam_in, ASM_INDEX.out.mmi)
-        ASM_ASSIGN(ASM_MAP.out.bam)
+        HIPHAP(ASM_MAP.out.bams)
         // tag the VCF-haplotagged BAM when there is one: its HP/PS give the agreement table, then get replaced
-        ASM_TAG(ASM_ASSIGN.out.assignments, params.haplotag ? HAPLOTAG.out.bam.map { c, b, i -> [b, i] } : ch_bam_in)
-        ch_asm_files = ASM_ASSIGN.out.by_length.mix(ASM_ASSIGN.out.as_diff, ASM_TAG.out.bins, ASM_TAG.out.agreement,
-                                                    ASM_TAG.out.cells)
+        ASM_TAG(HIPHAP.out.assignments, params.haplotag ? HAPLOTAG.out.bam.map { c, b, i -> [b, i] } : ch_bam_in)
+        ch_asm_files = HIPHAP.out.by_length.mix(HIPHAP.out.hapq, ASM_TAG.out.bins, ASM_TAG.out.agreement,
+                                                ASM_TAG.out.cells)
     } else {
         ch_asm_files = Channel.empty()
     }
@@ -263,7 +254,7 @@ workflow {
         variant_calls: params.vcf ?: "Clair3 ${params.clair3_model}".toString(),
         platform: params.platform, drop_duplicates: params.drop_duplicates, chroms: chroms, combos: combos, hybrid_merge: params.hybrid_merge,
         haplotag_combo: params.haplotag ? ht_combo : null, haplotag_tool: params.haplotag_tool,
-        haplotag_bin_mb: params.haplotag_bin_mb, asm_min_diff: params.asm_min_diff,
+        haplotag_bin_mb: params.haplotag_bin_mb, asm_min_hapq: params.asm_min_hapq,
         truth: params.hap1 ? "dipcall: ${params.hap1} + ${params.hap2}".toString() : params.truth_vcf,
         filters: [min_qual: params.min_qual, min_dp: params.min_dp, min_vaf: params.min_vaf, max_vaf: params.max_vaf],
         version: workflow.manifest.version, run_name: workflow.runName, started: workflow.start.toString()
@@ -273,7 +264,7 @@ workflow {
         .mix(FILTER_HET_SNPS.out.calls, FILTER_HET_SNPS.out.kept)
         .mix(CONCAT_PHASED.out.stats.flatMap { id, s, b -> [s, b] })
         .mix(COMPARE_READS_FINAL.out.tsv.flatMap { id, t, b -> [t, b] })
-        .mix(ch_orientation, ch_junctions, ch_concordance, ch_ht_counts, ch_cell_qc, ch_dup_tsv, ch_truth_files, ch_asm_files)
+        .mix(ch_orientation, ch_junctions, ch_ht_counts, ch_cell_qc, ch_dup_tsv, ch_truth_files, ch_asm_files)
         .collect()
 
     REPORT(ch_report_files, fai, run_info)

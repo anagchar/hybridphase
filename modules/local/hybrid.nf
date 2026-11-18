@@ -138,22 +138,3 @@ process COMPARE_READS_FINAL {
         ${reads_vcf} ${final_vcf} > ${combo}.reads_vs_final.txt
     """
 }
-
-process METHOD_CONCORDANCE {
-    label 'light'
-    publishDir "${params.outdir}/${params.sample}/04_qc", mode: 'copy'
-
-    input:
-    tuple val(names), path(vcfs), path(tbis)
-
-    output:
-    path "method_concordance.tsv", emit: tsv
-    path "method_concordance.txt"
-
-    script:
-    """
-    # truth-free: how much do the different read/population combinations agree with each other?
-    whatshap compare --names ${names.join(',')} --ignore-sample-name --only-snvs \\
-        --tsv-pairwise method_concordance.tsv ${vcfs.join(' ')} > method_concordance.txt
-    """
-}

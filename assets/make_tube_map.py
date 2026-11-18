@@ -126,9 +126,9 @@ def main():
     track(ax, [(150, Y1), (150, YA), (1700, YA)], ASM, dashed=True, z=1)
     track(ax, [(760, -78), (760, YA)], ASM, z=1)
     for x, name, tool in [(430, "Reads to FASTQ\n(tags kept)", "samtools fastq"),
-                          (760, "Map to hap1 + hap2", "minimap2"),
-                          (1080, "Assign haplotype\nper read", "alignment score"),
-                          (1400, "Tag GRCh38 BAM", "HP / ha / hd tags")]:
+                          (760, "Map to hap1 and\nto hap2 separately", "minimap2 ×2"),
+                          (1080, "Assign haplotype\n+ confidence (HapQ)", "HipHap"),
+                          (1400, "Tag GRCh38 BAM", "HP + hq, HapQ ≥ 20")]:
         stop(ax, x, YA)
         label(ax, x, YA + 32, name, tool, va="top")
     file_icon(ax, 760, -118, "FASTA")
@@ -175,9 +175,9 @@ def main():
     label(ax, 1528, 938, "per-cell\nallele counts")
 
     # ---------------- QC line
-    for x, name, tool in [(1300, "Junction test", "masked block joins"),
-                          (1105, "Phase stats &\nmethod agreement", "WhatsHap compare"),
-                          (900, "Assembly truth\n(optional)", "dipcall + WhatsHap")]:
+    for x, name, tool in [(1345, "Junction test", "masked block joins"),
+                          (1110, "Phase stats &\nreads vs final", "WhatsHap stats / compare"),
+                          (870, "Assembly truth\n(optional)", "dipcall + WhatsHap")]:
         stop(ax, x, QY)
         label(ax, x, QY - 30, name)
         ax.text(x, QY + 32, tool, ha="center", va="center", fontsize=12.5, fontweight="bold", color=TOOL)

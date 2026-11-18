@@ -14,7 +14,7 @@ nextflow run main.nf -profile vsc_mindwell \
     --sample COLO829BL --bam COLO829BL.bam --ref GRCh38.fasta \
     --clair3_model_dir /path/to/clair3_models --clair3_model r1041_e82_400bps_sup_v520 \
     --clair3_container hkubal-clair3_v2.0.0.sif --phasing_container hybridphase.sif \
-    --read_phaser whatshap,longphase --pop_phaser shapeit4,beagle
+    --read_phaser whatshap --pop_phaser shapeit4
 ```
 
 or with a params file: `examples/colo829bl.params.yaml`, submitted as a head job with
@@ -49,7 +49,8 @@ To use a panel outside the container: `--panel_dir`, `--panel_name '{chr}.bcf'`,
   panel alone (one run per chromosome, shared by all read phasers).
 - `none`: read blocks only.
 
-Lists run every combination (e.g. 2 × 2 = 4 results); the report compares them.
+Normally you pick one of each (default: WhatsHap + SHAPEIT4). A comma-separated list runs several
+combinations side by side, e.g. to try them on a new data type.
 
 **Hybrid merge** (`--hybrid_merge`)
 - `orient` (default): `bin/hybrid_merge.py` flips each read block as a whole to the majority orientation of
@@ -76,7 +77,6 @@ allele count tables (bash steps 4–5).
 | Completeness | % het SNPs phased and block N50 per chromosome, read-only vs hybrid; read block length distribution |
 | Read blocks vs population | ideogram of read blocks coloured by how well the population phase agrees with them; orientation success vs block size; switches between read-only and final phasing |
 | **Junction test** | masking benchmark (`bin/junction_test.py`): every read block with ≥ 10 SNPs is split in two, the population phaser re-joins the halves blind, and the reads say which way is right. Error rate per gap size, with the gap distribution of the real block junctions next to it |
-| Method agreement | pairwise switch rate and block-wise Hamming between all combinations |
 | Haplotagged BAM | % reads H1 / H2 / untagged per chromosome; H1 read fraction in 1 Mb bins along the genome. Normal tissue sits at 0.5; CNAs / LOH move whole segments away from it, and switch errors show as jumps between mirrored levels |
 | Assembly haplotagging | optional, see below: assignment per read length, H1 fraction along the genome, per-cell counts, agreement with the VCF-based haplotags |
 | Assembly truth | optional, see below: accuracy against a truth from a diploid assembly |
@@ -84,21 +84,24 @@ allele count tables (bash steps 4–5).
 
 ## Optional: haplotagging with a haplotype-resolved assembly
 
+> **🚧 Under development.** This part has only been tested on simulated data so far; options and outputs may change.
+
 With `--hap1 / --hap2` (the two haplotype FASTAs of a diploid assembly of the same individual) the reads are
-also tagged **directly from the assembly**, without variant calling or statistical phasing:
+also tagged **directly from the assembly**, without variant calling or statistical phasing, using
+[HipHap](https://github.com/jheinz27/hiphap) (Heinz, Marin, Meyerson & Li, bioRxiv 2026):
 
-1. hap1 and hap2 are combined into one diploid reference (contigs renamed `h1_*` / `h2_*`) and indexed with minimap2
-2. the primary reads of the input BAM are extracted (`CB` / `UB` tags kept) and mapped to it, with secondary alignments
-3. per read, the best alignment score on hap1 is compared with the best on hap2: a difference of at least
-   `--asm_min_diff` (default 6, about one het SNV for the ONT scoring) assigns H1 or H2; equal scores
-   (homozygous stretches, short fragments without a het site) leave the read unassigned
-4. the original GRCh38 BAM gets `HP:i` (1/2), `ha:Z` (assembly contig) and `hd:i` (score difference)
+1. the primary reads of the input BAM are extracted (`CB` / `UB` tags kept) and aligned with minimap2 to hap1
+   and to hap2 separately (contigs prefixed `h1_` / `h2_`)
+2. HipHap compares the two alignments of every read and assigns it to the better-supported haplotype, with a
+   Phred-scaled confidence, HapQ (0 = tie: the read crosses no difference between the haplotypes)
+3. reads with HapQ ≥ `--asm_min_hapq` (default 20) get `HP:i` (1/2), `hq:i` (HapQ) and `ha:Z` (assembly contig)
+   on the original GRCh38 BAM, which keeps `CB`, so it can go straight into ASCAT.sc with `hp_tag = "HP"`
 
-This works for long-read BAMs and for BAMs with a mix of short and long fragments (single-cell DNA); the report
-shows the assigned share per read length, the H1 fraction along the genome, per-cell H1/H2 counts when
-reads carry `CB`, and the per-read agreement with the VCF-based haplotags. H1/H2 are consistent along a whole
-chromosome only if the assembly is phased chromosome-wide (trio or Hi-C); otherwise per contig (`ha` tag).
-Turn it off with `--assembly_haplotag false`.
+This works for long-read BAMs and for BAMs with a mix of short and long fragments (single-cell DNA), although
+short fragments are often ties. The report shows the assigned share per read length, the HapQ distribution,
+the H1 fraction along the genome, per-cell H1/H2 counts when reads carry `CB`, and the per-read agreement
+with the VCF-based haplotags. H1/H2 are consistent along a whole chromosome only if the assembly is phased
+chromosome-wide (trio or Hi-C); otherwise per contig (`ha` tag). Turn it off with `--assembly_haplotag false`.
 
 ## Optional: benchmark against an assembly truth
 
@@ -122,7 +125,7 @@ chromosome, and a mosaic of where each chromosome is phased like the truth or ha
   01_variant_calling/   Clair3 VCF, germline_het_snps.vcf.gz, filter QC
   02_read_phasing/<read_phaser>/          <read>_reads.phased.vcf.gz + stats
   03_hybrid_phasing/<read>_<pop>/         <read>_<pop>.phased.vcf.gz, phases_for_ascat.vcf.gz, stats, reads-vs-final compare
-  04_qc/                phasing_report.html, figures/, tables/, junction_test/, block_orientation/, method_concordance.tsv,
+  04_qc/                phasing_report.html, figures/, tables/, junction_test/, block_orientation/,
                         truth/ (optional: dipcall truth, whatshap compare per VCF)
   05_haplotag/          <sample>.<combo>.haplotagged.bam(.bai), haplotag list, haplotag_counts.tsv
     assembly/           <sample>.assembly_haplotagged.bam, <sample>.asm.bam (reads on hap1+hap2), per-read assignments,
@@ -143,7 +146,7 @@ pipeline_info/          Nextflow timeline, report, trace, DAG
 | `--junction_test` | true | |
 | `--haplotag` | true | |
 | `--hap1 / --hap2` | – | haplotype-resolved assembly: assembly haplotagging + truth benchmark |
-| `--asm_min_diff` | 6 | alignment-score difference needed to assign a read to a haplotype |
+| `--asm_min_hapq` | 20 | minimum HipHap HapQ for a read to get an assembly-based `HP` tag |
 | `--truth_vcf / --truth_bed` | – | existing truth instead of dipcall |
 
 All parameters with comments: `nextflow.config`. Resources per step: `conf/base.config`.
@@ -153,7 +156,7 @@ All parameters with comments: `nextflow.config`. Resources per step: `conf/base.
 `tests/run_script_tests.sh` runs the python helpers and the report on synthetic data (known haplotypes,
 short read blocks, a population phase with long-range switch errors) and checks that the merge never
 breaks a read block. It needs only python with pysam, pandas and matplotlib. A full test run on real data:
-`-profile vsc_mindwell,test` (chr21–22, all four combinations).
+`-profile vsc_mindwell,test` (chr21–22, all four combinations, so every tool is exercised).
 
 ## Citations
 

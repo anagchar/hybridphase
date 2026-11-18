@@ -8,6 +8,7 @@
 - **Beagle 5**: Browning BL, et al. Fast two-stage phasing of large-scale sequence data. *Am J Hum Genet* 108, 1880–1890 (2021).
 - **BCFtools / SAMtools / HTSlib**: Danecek P, et al. Twelve years of SAMtools and BCFtools. *GigaScience* 10, giab008 (2021).
 - **minimap2**: Li H. Minimap2: pairwise alignment for nucleotide sequences. *Bioinformatics* 34, 3094–3100 (2018).
+- **HipHap**: Heinz JM, Marin MG, Meyerson M, Li H. HipHap: haplotype assignment and confidence scoring for diploid reference genomes. *bioRxiv* 2026.09.24.754153 (2026).
 - **dipcall**: Li H, et al. A synthetic-diploid benchmark for accurate variant-calling evaluation. *Nat Methods* 15, 595–597 (2018).
 - **cellsnp-lite**: Huang X, Huang Y. Cellsnp-lite: an efficient tool for genotyping single cells. *Bioinformatics* 37, 4569–4571 (2021).
 - **1000 Genomes high-coverage panel**: Byrska-Bishop M, et al. High-coverage whole-genome sequencing of the expanded 1000 Genomes Project cohort including 602 trios. *Cell* 185, 3426–3440 (2022).

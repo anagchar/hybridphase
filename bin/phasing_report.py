@@ -9,7 +9,6 @@ Reads everything the pipeline drops into --data:
   orientation_<combo>.tsv             read block vs population phase (hybrid_merge.py)
   junctions_<combo>.tsv               masking test (junction_test.py)
   <combo>.reads_vs_final.tsv/.bed     whatshap compare reads-only vs final
-  method_concordance.tsv              whatshap compare between all final VCFs
   haplotag_counts.tsv                 reads per chromosome / bin / haplotype
   single_cell_allele_qc.tsv           optional, cellsnp-lite per-cell QC
 
@@ -502,46 +501,6 @@ def section_junctions(R, d, combos, colors, kpi):
           "hiding links that the reads already know.", items)
 
 
-def section_concordance(R, d, combos, colors):
-    t = read_tsv(os.path.join(d, "method_concordance.tsv"))
-    if t is None or not len(t):
-        return
-    t = t[t.chromosome != "ALL"] if "chromosome" in t else t
-    names = [c for c in combos if c in set(t.dataset_name0) | set(t.dataset_name1)]
-    m_sw = pd.DataFrame(np.nan, index=names, columns=names)
-    m_ham = m_sw.copy()
-    for (a, b), g in t.groupby(["dataset_name0", "dataset_name1"]):
-        sw = 100 * g.all_switches.sum() / g.all_assessed_pairs.sum()
-        ham = 100 * g.blockwise_hamming.sum() / g.covered_variants.sum() if "blockwise_hamming" in g else np.nan
-        m_sw.loc[a, b] = m_sw.loc[b, a] = sw
-        m_ham.loc[a, b] = m_ham.loc[b, a] = ham
-    fig, axes = plt.subplots(1, 2, figsize=(4.2 * 2 + 1.5, 0.55 * len(names) + 2.2))
-    for ax, m, title in [(axes[0], m_sw, "Switch rate between methods (%)"),
-                         (axes[1], m_ham, "Block-wise Hamming between methods (%)")]:
-        v = m.values.astype(float)
-        vmax = np.nanmax(v) if np.isfinite(v).any() else 1
-        ax.imshow(np.ma.masked_invalid(v), cmap=matplotlib.colors.LinearSegmentedColormap.from_list(
-            "b", ["#f2f7fd", SEQ["mid"], SEQ["hi"]]), vmin=0, vmax=vmax or 1)
-        for i in range(len(names)):
-            for j in range(len(names)):
-                if np.isfinite(v[i, j]):
-                    ax.text(j, i, f"{v[i, j]:.2f}", ha="center", va="center", fontsize=8,
-                            color="white" if v[i, j] > 0.6 * vmax else INK)
-        ax.set_xticks(range(len(names)), [pretty(n) for n in names], rotation=35, ha="right")
-        ax.set_yticks(range(len(names)), [pretty(n) for n in names])
-        ax.grid(False)
-        ax.set_title(title)
-        for s in ax.spines.values():
-            s.set_visible(False)
-    fig.tight_layout()
-    items = [("fig", R.fig(fig, "12_method_concordance"),
-              "Pairwise comparison of the final VCFs. Methods that agree are not necessarily right, but large "
-              "Hamming distances show where at least one of them makes long-range errors.")]
-    R.table(m_sw.reset_index().rename(columns={"index": "method"}), "12_method_switch_rate")
-    R.table(m_ham.reset_index().rename(columns={"index": "method"}), "12_method_hamming")
-    R.add("5 · Agreement between methods", "", items)
-
-
 def section_haplotag(R, d, chroms, lens, kpi, primary, tool, bin_mb=1):
     t = read_tsv(os.path.join(d, "haplotag_counts.tsv"))
     if t is None or not len(t):
@@ -601,7 +560,7 @@ def section_haplotag(R, d, chroms, lens, kpi, primary, tool, bin_mb=1):
                       "segment are long-range switch errors."))
         R.table(b[["chrom", "bin", 1, 2, "frac"]].rename(columns={1: "H1_reads", 2: "H2_reads", "frac": "H1_fraction"}),
                 "14_haplotype_fraction_bins")
-    R.add("6 · Haplotagged BAM", "Reads assigned to haplotypes with the final phased VCF.", items)
+    R.add("5 · Haplotagged BAM", "Reads assigned to haplotypes with the final phased VCF.", items)
 
 
 def truth_runs(ivs):
@@ -628,13 +587,13 @@ def _close(run, longs, flips):
     return longs, flips
 
 
-def section_assembly(R, d, chroms, lens, kpi, bin_mb=1, min_diff=6):
+def section_assembly(R, d, chroms, lens, kpi, bin_mb=1, min_hapq=20):
     bl = read_tsv(os.path.join(d, "asm.by_length.tsv"))
     if bl is None or not len(bl):
         return
     items = []
-    classes = [("H1", H1, "H1"), ("H2", H2, "H2"), ("ambiguous", UNTAGGED, "same score on both"),
-               ("unmapped", "#8a8984", "unmapped")]
+    classes = [("H1", H1, "H1"), ("H2", H2, "H2"), (f"HapQ < {min_hapq}", "#e1e0d9", f"HapQ 1–{min_hapq - 1}"),
+               ("tie (HapQ 0)", UNTAGGED, "tie (HapQ 0)"), ("unmapped", "#8a8984", "unmapped")]
     labs = ["<500", "500–1k", "1–2k", "2–5k", "5–10k", "10–20k", "20–50k", ">50k"]
     p = bl.pivot_table(index="length_bin", columns="class", values="reads", aggfunc="sum").reindex(labs).fillna(0)
     p = p[p.sum(axis=1) > 0]
@@ -661,22 +620,21 @@ def section_assembly(R, d, chroms, lens, kpi, bin_mb=1, min_diff=6):
     axes[0].set_ylabel("% reads")
     axes[0].grid(axis="x", visible=False)
     axes[0].set_title("Haplotype assignment by read length (n above)")
-    legend_below(axes[0], ncol=4)
-    ad = read_tsv(os.path.join(d, "asm.as_diff.tsv"))
-    if ad is not None and len(ad):
-        axes[1].bar(ad.as_diff, ad.reads, width=1, color=SERIES[0])
-        for t in (-min_diff, min_diff):
-            axes[1].axvline(t, color=INK2, lw=1, ls=(0, (3, 2)))
+    legend_below(axes[0], ncol=5)
+    hq = read_tsv(os.path.join(d, "asm.hapq.tsv"))
+    if hq is not None and len(hq):
+        axes[1].bar(hq.hapq, hq.reads, width=0.9, color=SERIES[0])
+        axes[1].axvline(min_hapq - 0.5, color=INK2, lw=1, ls=(0, (3, 2)))
         axes[1].set_yscale("log")
-        axes[1].set_xlim(-100, 100)
-        axes[1].set_xlabel("alignment score hap1 − hap2")
+        axes[1].set_xlim(-1, 61)
+        axes[1].set_xlabel("HapQ (HipHap)")
         axes[1].set_ylabel("reads (log)")
-        axes[1].set_title("Score difference (dashed = threshold)")
+        axes[1].set_title(f"Haplotype confidence (dashed = HapQ {min_hapq})")
     fig.tight_layout()
     items.append(("fig", R.fig(fig, "18_assembly_assignment"),
-                  "Reads mapped to hap1 + hap2 together; a read goes to the haplotype it aligns better to. Reads "
-                  "that align equally well to both carry no het site and stay unassigned, which is more common "
-                  "for short fragments."))
+                  "HipHap compares each read's alignments to hap1 and hap2 and gives a Phred-scaled confidence "
+                  "(HapQ). Reads that align equally well to both (HapQ 0) cross no het site; that is more common "
+                  "for short fragments. Only reads at or above the HapQ threshold are tagged."))
     R.table(p.reset_index(), "18_assembly_assignment_by_length")
 
     bins = read_tsv(os.path.join(d, "asm.bins.tsv"))
@@ -746,9 +704,9 @@ def section_assembly(R, d, chroms, lens, kpi, bin_mb=1, min_diff=6):
         ax.set_title(f"Assigned reads per cell (n = {len(pc):,})")
         items.append(("fig", R.fig(fig, "20_assembly_per_cell"),
                       "Per-cell H1 / H2 read counts per chromosome are in 05_haplotag/assembly/asm.per_cell.tsv.gz."))
-    R.add("7 · Haplotagging with the diploid assembly",
-          "Optional (--hap1 / --hap2): every read is aligned to both assembly haplotypes and tagged with the one it "
-          "matches better.", items)
+    R.add("6 · Haplotagging with the diploid assembly (under development)",
+          "Optional (--hap1 / --hap2), under development: every read is aligned to both assembly haplotypes and "
+          "HipHap assigns it to the better-supported one.", items)
 
 
 def section_truth(R, d, chroms, lens, ids, colors, combos, kpi):
@@ -842,7 +800,7 @@ def section_truth(R, d, chroms, lens, ids, colors, combos, kpi):
         items.append(("fig", R.fig(fig, "17_truth_mosaic"),
                       "Each long-range switch flips the orientation; black ticks = single-SNV flips; right = block-wise "
                       "Hamming per chromosome. Regions without truth SNVs (e.g. centromeres) are not marked."))
-    R.add("8 · Comparison with the assembly truth",
+    R.add("7 · Comparison with the assembly truth",
           "Optional: the phased VCFs compared with a truth set from a haplotype-resolved diploid assembly of the same "
           "individual (dipcall), with WhatsHap compare.", items)
 
@@ -866,7 +824,7 @@ def section_cells(R, d):
     axes[1].set_title("Depth vs covered SNPs")
     fig.tight_layout()
     desc = q[["covered_snps", "total_depth", "median_cov_per_covered_snp"]].describe().T.reset_index()
-    R.add("9 · Single-cell allele counts", "cellsnp-lite on the final phased SNPs (input for ASCAT.sc).",
+    R.add("8 · Single-cell allele counts", "cellsnp-lite on the final phased SNPs (input for ASCAT.sc).",
           [("fig", R.fig(fig, "15_cell_qc"), ""), ("table", desc.round(1), "")])
 
 
@@ -953,9 +911,8 @@ def main():
     section_completeness(R, d, chroms, lens, ids, colors, primary, kpi)
     section_orientation(R, d, chroms, lens, combos, colors, kpi)
     section_junctions(R, d, combos, colors, kpi)
-    section_concordance(R, d, combos, colors)
     section_haplotag(R, d, chroms, lens, kpi, primary, info.get("haplotag_tool", "whatshap"), info.get("haplotag_bin_mb", 1))
-    section_assembly(R, d, chroms, lens, kpi, info.get("haplotag_bin_mb", 1), info.get("asm_min_diff", 6))
+    section_assembly(R, d, chroms, lens, kpi, info.get("haplotag_bin_mb", 1), info.get("asm_min_hapq", 20))
     section_truth(R, d, chroms, lens, ids, colors, combos, kpi)
     section_cells(R, d)
     write_html(R, info, kpi, os.path.join(a.out, "phasing_report.html"))
