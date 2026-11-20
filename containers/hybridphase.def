@@ -42,6 +42,7 @@ From: condaforge/miniforge3:latest
         whatshap=2.3 \
         longphase \
         beagle \
+        openjdk=17 \
         cellsnp-lite=1.2.3 \
         pysam \
         numpy \
@@ -55,11 +56,13 @@ From: condaforge/miniforge3:latest
     mamba create -y -n shapeit4 -c conda-forge -c bioconda shapeit4=4.2.2
     ln -sf /opt/conda/envs/shapeit4/bin/shapeit4 /usr/local/bin/shapeit4
 
-    # fail the build here if a tool does not run
+    # fail the build here if a tool does not run (env on PATH: the beagle wrapper calls "java")
+    export PATH=/opt/conda/envs/hybridphase/bin:$PATH
     /usr/local/bin/shapeit4 --help > /dev/null
     /opt/conda/envs/hybridphase/bin/longphase --version
     /opt/conda/envs/hybridphase/bin/minimap2 --version
-    /opt/conda/envs/hybridphase/bin/beagle 2>&1 | head -n 2
+    java -version
+    { beagle 2>&1 || true; } | grep -qi beagle
     /opt/conda/envs/hybridphase/bin/python -c "import pysam, pandas, matplotlib"
 
     mamba clean --all -f -y
