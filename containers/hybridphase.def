@@ -74,7 +74,11 @@ From: condaforge/miniforge3:latest
     wget -q https://github.com/jheinz27/hiphap/releases/download/${HH}/${HHT}.tar.gz \
             https://github.com/jheinz27/hiphap/releases/download/${HH}/${HHT}.tar.gz.sha256
     sha256sum -c ${HHT}.tar.gz.sha256
-    tar -xzf ${HHT}.tar.gz && mv ${HHT}/hiphap /usr/local/bin/hiphap && rm -rf ${HHT}*
+    # --no-same-owner: a fakeroot build cannot chown to the uid stored in the archive
+    tar --no-same-owner -xzf ${HHT}.tar.gz
+    mv ${HHT}/hiphap /usr/local/bin/hiphap
+    chmod 755 /usr/local/bin/hiphap
+    rm -rf ${HHT}*
     /usr/local/bin/hiphap --help > /dev/null
     cd /
     export PATH=/opt/conda/envs/hybridphase/bin:$PATH
