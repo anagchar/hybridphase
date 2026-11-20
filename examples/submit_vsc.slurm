@@ -18,5 +18,9 @@ micromamba activate --stack singularity-env
 
 cd "${SLURM_SUBMIT_DIR}"
 export NXF_WORK="${VSC_SCRATCH}/nf_work/hybridphase"
+# sbatch AND squeue must look at the mindwell cluster, or Nextflow loses track of its jobs
+export SLURM_CLUSTERS=mindwell
+export NXF_OPTS="-Xms1g -Xmx6g"
 
-nextflow run main.nf -profile vsc_mindwell -params-file examples/colo829bl.params.yaml -resume
+PARAMS=${PARAMS:-examples/colo829bl.params.yaml}
+nextflow run main.nf -profile vsc_mindwell -params-file "$PARAMS" -resume "$@"
