@@ -17,7 +17,9 @@ micromamba activate nextflow_env          # any env with nextflow >= 23.10 and j
 micromamba activate --stack singularity-env
 
 cd "${SLURM_SUBMIT_DIR}"
-export NXF_WORK="${VSC_SCRATCH}/nf_work/hybridphase"
+# all intermediate files go here; override with WORKDIR=/some/big/place sbatch ...
+export NXF_WORK="${WORKDIR:-${VSC_SCRATCH}/nf_work/hybridphase}"
+mkdir -p "$NXF_WORK"
 # sbatch AND squeue must look at the mindwell cluster, or Nextflow loses track of its jobs
 export SLURM_CLUSTERS=mindwell
 export NXF_OPTS="-Xms1g -Xmx6g"
