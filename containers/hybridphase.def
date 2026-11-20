@@ -22,8 +22,8 @@ From: condaforge/miniforge3:latest
 
 %post -c /bin/bash
     set -euo pipefail
-    echo "===> Verifying raw panel integrity..."
-    for f in /opt/hg38/*.vcf.gz; do gzip -t "$f" || { echo "CORRUPT: $f"; exit 1; }; done
+    # (no separate gzip -t of the panel: it reads ~50 GB silently; a corrupt file makes the
+    #  bcftools conversion below fail anyway, because of pipefail)
     export PATH=/opt/conda/bin:$PATH
     export DEBIAN_FRONTEND=noninteractive
 
@@ -95,7 +95,7 @@ From: condaforge/miniforge3:latest
     # keep biallelic SNPs, drop INFO, add AC/AN/AF, write indexed BCF for shapeit4 --reference
     echo "===> Converting 1kGP high-coverage panel to indexed BCF..."
     for c in $(seq 1 22); do
-        echo "Processing chr${c}..."
+        echo "$(date +%H:%M) processing chr${c}..."
         bcftools view -v snps -m2 -M2 --threads 4 -Ou \
             "$RAW_PANEL/1kGP_high_coverage_Illumina.chr${c}.filtered.SNV_INDEL_SV_phased_panel.vcf.gz" \
           | bcftools annotate -x INFO -Ou - \
