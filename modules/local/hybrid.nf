@@ -95,7 +95,7 @@ process JUNCTION_SCORE {
 process CONCAT_PHASED {
     tag "${id}"
     label 'light'
-    publishDir "${params.outdir}/${params.sample}/${pubdir}", mode: 'copy'
+    publishDir path: { "${params.outdir}/${params.sample}/${pubdir}" }, mode: 'copy'
 
     input:
     tuple val(id), val(pubdir), path(vcfs), path(tbis)
@@ -126,7 +126,7 @@ process CONCAT_PHASED {
 process COMPARE_READS_FINAL {
     tag "${combo}"
     label 'light'
-    publishDir "${params.outdir}/${params.sample}/03_hybrid_phasing/${combo}/qc", mode: 'copy'
+    publishDir path: { "${params.outdir}/${params.sample}/03_hybrid_phasing/${combo}/qc" }, mode: 'copy'
 
     input:
     tuple val(combo), path(final_vcf), path(final_tbi), path(reads_vcf), path(reads_tbi)

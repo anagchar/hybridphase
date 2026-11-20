@@ -23,11 +23,12 @@ include { REPORT }                                       from './modules/local/r
 
 // '1-22' / '21,22' / 'chr1-chr5,X' -> [chr1, ...]
 def parseChroms(spec, prefix) {
-    spec.toString().tokenize(',').collectMany { t ->
-        t = t.trim().replaceFirst(/^${prefix}/, '')
-        if (t ==~ /\d+-\d+/) {
-            def (a, b) = t.tokenize('-').collect { it as int }
-            return (a..b).collect { "${prefix}${it}".toString() }
+    spec.toString().tokenize(',').collectMany { tok ->
+        def t = tok.trim()
+        if (prefix) t = t.replace(prefix.toString(), '')
+        if (t ==~ '[0-9]+-[0-9]+') {
+            def ab = t.tokenize('-').collect { x -> x as int }
+            return (ab[0]..ab[1]).collect { n -> "${prefix}${n}".toString() }
         }
         return ["${prefix}${t}".toString()]
     }
@@ -35,11 +36,19 @@ def parseChroms(spec, prefix) {
 
 def splitList(v) { v.toString().tokenize(',')*.trim().findAll { it } }
 
-def findIndex(String path, List suffixes) {
-    def hit = suffixes.collect { file(it(path)) }.find { it.exists() }
-    if (!hit) error "No index found for ${path} (tried: ${suffixes.collect { it(path) }.join(', ')})"
+def findIndex(String path, List candidates) {
+    def hit = candidates.collect { c -> file(c) }.find { f -> f.exists() }
+    if (!hit) error "No index found for ${path} (tried: ${candidates.join(', ')})"
     return hit
 }
+
+// per-chromosome VCFs of one id -> [id, publish dir, vcfs, tbis] in chromosome order
+def byChrom(id, pubdir, cs, vs, ts, chromIndex) {
+    def o = (0..<cs.size()).sort { i -> chromIndex[cs[i]] }
+    return [id, pubdir, o.collect { i -> vs[i] }, o.collect { i -> ts[i] }]
+}
+
+def stripSuffix(String s, String suf) { s.endsWith(suf) ? s.substring(0, s.length() - suf.length()) : s }
 
 workflow {
     // ---------------------------------------------------------------- parameters
@@ -83,7 +92,7 @@ workflow {
     """.stripIndent()
 
     def bam = file(params.bam, checkIfExists: true)
-    def bai = findIndex(params.bam, [{ "${it}.bai" }, { it.replaceFirst(/\.bam$/, '.bai') }, { "${it}.csi" }])
+    def bai = findIndex(params.bam, ["${params.bam}.bai", "${stripSuffix(params.bam.toString(), '.bam')}.bai", "${params.bam}.csi"])
     def ref = file(params.ref, checkIfExists: true)
     def fai = file("${params.ref}.fai", checkIfExists: true)
     ch_bam_in = Channel.value([bam, bai])           // original BAM: haplotagged and used for single cells
@@ -101,7 +110,7 @@ workflow {
 
     // ---------------------------------------------------------------- 1. variant calling
     if (params.vcf) {
-        def tbi = findIndex(params.vcf, [{ "${it}.tbi" }, { "${it}.csi" }])
+        def tbi = findIndex(params.vcf, ["${params.vcf}.tbi", "${params.vcf}.csi"])
         ch_vcf = Channel.value([params.sample, file(params.vcf, checkIfExists: true), tbi])
     } else {
         CLAIR3(ch_bam.map { b, i -> [params.sample, b, i] }, ch_ref, file(params.clair3_model_dir, checkIfExists: true))
@@ -160,21 +169,17 @@ workflow {
     HYBRID_MERGE(ch_merge_in, ch_het, ch_bam, ch_ref)
 
     // ---------------------------------------------------------------- 5. genome-wide VCFs (read-only and hybrid)
-    def byChrom = { id, pubdir, cs, vs, ts ->
-        def o = (0..<cs.size()).sort { chromIndex[cs[it]] }
-        [id, pubdir, o.collect { vs[it] }, o.collect { ts[it] }]
-    }
     ch_concat_in = HYBRID_MERGE.out.vcf
         .groupTuple(by: 0, size: chroms.size())
-        .map { combo, cs, vs, ts -> byChrom(combo, "03_hybrid_phasing/${combo}", cs, vs, ts) }
+        .map { combo, cs, vs, ts -> byChrom(combo, "03_hybrid_phasing/${combo}", cs, vs, ts, chromIndex) }
         .mix(ch_reads.map { rp, c, v, t -> ["${rp}_reads".toString(), c, v, t] }
                      .groupTuple(by: 0, size: chroms.size())
-                     .map { id, cs, vs, ts -> byChrom(id, "02_read_phasing/${id - ~/_reads$/}", cs, vs, ts) })
+                     .map { id, cs, vs, ts -> byChrom(id, "02_read_phasing/${stripSuffix(id, '_reads')}", cs, vs, ts, chromIndex) })
     CONCAT_PHASED(ch_concat_in)
 
     ch_final = CONCAT_PHASED.out.vcf.filter { it[0] in combos }                // [combo, vcf, tbi]
     ch_reads_genome = CONCAT_PHASED.out.vcf.filter { it[0].endsWith('_reads') }
-        .map { id, v, t -> [id - ~/_reads$/, v, t] }
+        .map { id, v, t -> [stripSuffix(id, '_reads'), v, t] }
 
     // ---------------------------------------------------------------- 6. truth-free QC
     COMPARE_READS_FINAL(
@@ -270,8 +275,3 @@ workflow {
     REPORT(ch_report_files, fai, run_info)
 }
 
-workflow.onComplete {
-    log.info(workflow.success
-        ? "\nDone. Report: ${params.outdir}/${params.sample}/04_qc/phasing_report.html\n"
-        : "\nFailed: ${workflow.errorMessage}\n")
-}

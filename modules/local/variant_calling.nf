@@ -5,7 +5,7 @@
 process CLAIR3 {
     tag "${sample}"
     label 'clair3'
-    publishDir "${params.outdir}/${sample}/01_variant_calling/clair3", mode: 'copy',
+    publishDir "${params.outdir}/${params.sample}/01_variant_calling/clair3", mode: 'copy',
         saveAs: { it.endsWith('.vcf.gz') || it.endsWith('.tbi') || it.endsWith('.log') ? file(it).name : null }
 
     input:
@@ -39,7 +39,7 @@ process CLAIR3 {
 process FILTER_HET_SNPS {
     tag "${sample}"
     label 'light'
-    publishDir "${params.outdir}/${sample}/01_variant_calling", mode: 'copy'
+    publishDir "${params.outdir}/${params.sample}/01_variant_calling", mode: 'copy'
 
     input:
     tuple val(sample), path(vcf), path(tbi)
