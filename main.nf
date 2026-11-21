@@ -44,7 +44,7 @@ def findIndex(String path, List candidates) {
 
 // per-chromosome VCFs of one id -> [id, publish dir, vcfs, tbis] in chromosome order
 def byChrom(id, pubdir, cs, vs, ts, chromIndex) {
-    def o = (0..<cs.size()).sort { i -> chromIndex[cs[i]] }
+    def o = (0..<cs.size()).toList().sort { i -> chromIndex[cs[i]] }
     return [id, pubdir, o.collect { i -> vs[i] }, o.collect { i -> ts[i] }]
 }
 
